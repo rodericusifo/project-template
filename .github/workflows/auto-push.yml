@@ -115,6 +115,7 @@ jobs:
 
         workload="${TAG%%/*}"
         version="${TAG#*/}"
+        version="${version#v}"
         if [ -z "$workload" ] || [ -z "$version" ] || [ ! -f "workload/$workload/Dockerfile" ]; then
           echo "::error::Invalid tag or missing Dockerfile: $TAG"
           exit 1
@@ -131,6 +132,9 @@ jobs:
 
         docker buildx build \
           --file "workload/$workload/Dockerfile" \
+          --build-arg "NAME=$REPOSITORY-$workload" \
+          --build-arg "VERSION=$version" \
+          --build-arg "MODE=development" \
           --tag "$image:$version" \
           --tag "$image:latest" \
           --push \
