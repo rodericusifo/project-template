@@ -13,12 +13,12 @@ on:
       - reopened
 
 jobs:
-  check-application-changes:
-    name: Check Application Changes
+  check-workload-changes:
+    name: Check Workload Changes
     runs-on: ubuntu-latest
     outputs:
-      has-application-changes: ${{ steps.check-changes.outputs.has-application-changes }}
-      modified-applications: ${{ steps.check-changes.outputs.modified-applications }}
+      has-workload-changes: ${{ steps.check-changes.outputs.has-workload-changes }}
+      modified-workloads: ${{ steps.check-changes.outputs.modified-workloads }}
     
     steps:
     - name: Checkout code
@@ -30,7 +30,7 @@ jobs:
       run: |
         git fetch --no-tags --prune origin prod-v1:prod-v1 || true
     
-    - name: Check application changes
+    - name: Check workload changes
       id: check-changes
       run: |
         #!/bin/bash
@@ -61,9 +61,9 @@ jobs:
 
         # Check if a file matches any pattern in the given service's .dockerignore
         # (e.g. *.cnf, *.env, *.key) - such files are excluded from the built image
-        # and shouldn't count as application changes.
+        # and shouldn't count as workload changes.
         matches_dockerignore() {
-            local service="$1" fname="$2" dockerignore_file="application/$1/.dockerignore"
+            local service="$1" fname="$2" dockerignore_file="workload/$1/.dockerignore"
             [ -f "$dockerignore_file" ] || return 1
             while IFS= read -r pattern; do
                 pattern="${pattern%%#*}"
@@ -74,25 +74,25 @@ jobs:
             return 1
         }
 
-        print_info "Checking for application changes..."
+        print_info "Checking for workload changes..."
         
         # Get commits in this PR
         commits_in_pr=$(git rev-list prod-v1..HEAD)
         
         if [ -z "$commits_in_pr" ]; then
             print_info "No new commits in PR."
-            echo "has-application-changes=false" >> $GITHUB_OUTPUT
+            echo "has-workload-changes=false" >> $GITHUB_OUTPUT
             exit 0
         fi
         
-        # Find modified applications (excluding certain files)
-        applications=()
+        # Find modified workloads (excluding certain files)
+        workloads=()
         
         while IFS= read -r commit; do
             files_changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
             while IFS= read -r file; do
-                if [[ $file == application/* ]]; then
-                    application_name=$(echo $file | cut -d'/' -f2)
+                if [[ $file == workload/* ]]; then
+                    workload_name=$(echo $file | cut -d'/' -f2)
                     
                     # Extract the file name from the path
                     filename=$(basename "$file")
@@ -102,40 +102,40 @@ jobs:
                        [[ "$filename" == "Makefile" ]] || \
                        [[ "$filename" == "docker-compose.yaml" ]] || \
                        [[ "$filename" == ".dockerignore" ]] || \
-                       matches_dockerignore "$application_name" "$filename"; then
-                        print_info "Skipping file (excluded from application change detection): $file"
+                       matches_dockerignore "$workload_name" "$filename"; then
+                        print_info "Skipping file (excluded from workload change detection): $file"
                         continue
                     fi
                     
-                    if [[ ! " ${applications[@]} " =~ " ${application_name} " ]]; then
-                        applications+=("$application_name")
+                    if [[ ! " ${workloads[@]} " =~ " ${workload_name} " ]]; then
+                        workloads+=("$workload_name")
                     fi
                 fi
             done <<< "$files_changed"
         done <<< "$commits_in_pr"
         
-        if [ ${#applications[@]} -eq 0 ]; then
-            print_info "No applications modified."
-            echo "has-application-changes=false" >> $GITHUB_OUTPUT
+        if [ ${#workloads[@]} -eq 0 ]; then
+            print_info "No workloads modified."
+            echo "has-workload-changes=false" >> $GITHUB_OUTPUT
             exit 0
         fi
         
-        print_info "Applications with changes: ${applications[*]}"
-        echo "has-application-changes=true" >> $GITHUB_OUTPUT
-        echo "modified-applications=$(IFS=,; echo "${applications[*]}")" >> $GITHUB_OUTPUT
+        print_info "Workloads with changes: ${workloads[*]}"
+        echo "has-workload-changes=true" >> $GITHUB_OUTPUT
+        echo "modified-workloads=$(IFS=,; echo "${workloads[*]}")" >> $GITHUB_OUTPUT
         
         # Create GitHub Actions summary
-        echo "## 📋 Application Changes Detected" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 Workload Changes Detected" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Applications with changes:** ${applications[*]}" >> $GITHUB_STEP_SUMMARY
-        echo "**Total applications:** ${#applications[@]}" >> $GITHUB_STEP_SUMMARY
+        echo "**Workloads with changes:** ${workloads[*]}" >> $GITHUB_STEP_SUMMARY
+        echo "**Total workloads:** ${#workloads[@]}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "These applications will be validated for proper version updates." >> $GITHUB_STEP_SUMMARY
+        echo "These workloads will be validated for proper version updates." >> $GITHUB_STEP_SUMMARY
         
-        print_success "Found ${#applications[@]} applications with changes"
+        print_success "Found ${#workloads[@]} workloads with changes"
 
   validate-stack-mk:
-    name: Validate stack.mk Applications List
+    name: Validate stack.mk Workloads List
     runs-on: ubuntu-latest
     
     steps:
@@ -144,7 +144,7 @@ jobs:
       with:
         fetch-depth: 1
     
-    - name: Validate applications in stack.mk
+    - name: Validate workloads in stack.mk
       run: |
         #!/bin/bash
         set -e
@@ -172,7 +172,7 @@ jobs:
             echo -e "${BLUE}INFO: $1${NC}"
         }
         
-        print_info "Validating that all applications are listed in stack.mk..."
+        print_info "Validating that all workloads are listed in stack.mk..."
         
         # Check if stack.mk exists
         if [ ! -f "stack.mk" ]; then
@@ -180,56 +180,56 @@ jobs:
             exit 1
         fi
         
-        # Extract applications from stack.mk
-        if ! grep -q "^APPLICATION :=" stack.mk; then
-            print_error "APPLICATION variable not found in stack.mk"
+        # Extract workloads from stack.mk
+        if ! grep -q "^WORKLOAD :=" stack.mk; then
+            print_error "WORKLOAD variable not found in stack.mk"
             exit 1
         fi
         
-        stack_mk_applications=$(grep "^APPLICATION :=" stack.mk | sed 's/APPLICATION := //' | tr ' ' '\n' | sort)
+        stack_mk_workloads=$(grep "^WORKLOAD :=" stack.mk | sed 's/WORKLOAD := //' | tr ' ' '\n' | sort)
         
-        if [ -z "$stack_mk_applications" ]; then
-            print_error "No applications found in stack.mk APPLICATION variable"
+        if [ -z "$stack_mk_workloads" ]; then
+            print_error "No workloads found in stack.mk WORKLOAD variable"
             exit 1
         fi
         
-        print_info "Applications listed in stack.mk:"
-        echo "$stack_mk_applications" | while read app; do
+        print_info "Workloads listed in stack.mk:"
+        echo "$stack_mk_workloads" | while read app; do
             if [ -n "$app" ]; then
                 print_info "  - $app"
             fi
         done
         
-        # Get actual applications from filesystem (excluding non-application directories)
-        filesystem_applications=""
-        for application_dir in application/*/; do
-            if [ -d "$application_dir" ]; then
-                application_name=$(basename "$application_dir")
-                # Skip non-application directories/files
-                if [[ "$application_name" != "Makefile" ]] && [[ "$application_name" != "gen-certs.sh" ]]; then
-                    # Verify it's actually an application by checking for VERSION file
-                    if [ -f "$application_dir/VERSION" ]; then
-                        if [ -n "$filesystem_applications" ]; then
-                            filesystem_applications="${filesystem_applications}"$'\n'"$application_name"
+        # Get actual workloads from filesystem (excluding non-workload directories)
+        filesystem_workloads=""
+        for workload_dir in workload/*/; do
+            if [ -d "$workload_dir" ]; then
+                workload_name=$(basename "$workload_dir")
+                # Skip non-workload directories/files
+                if [[ "$workload_name" != "Makefile" ]] && [[ "$workload_name" != "gen-certs.sh" ]]; then
+                    # Verify it's actually an workload by checking for VERSION file
+                    if [ -f "$workload_dir/VERSION" ]; then
+                        if [ -n "$filesystem_workloads" ]; then
+                            filesystem_workloads="${filesystem_workloads}"$'\n'"$workload_name"
                         else
-                            filesystem_applications="$application_name"
+                            filesystem_workloads="$workload_name"
                         fi
                     else
-                        print_warning "Directory $application_name found but no VERSION file - might not be an application"
+                        print_warning "Directory $workload_name found but no VERSION file - might not be an workload"
                     fi
                 fi
             fi
         done
         
-        if [ -z "$filesystem_applications" ]; then
-            print_warning "No applications found in application/ directory"
+        if [ -z "$filesystem_workloads" ]; then
+            print_warning "No workloads found in workload/ directory"
             exit 0
         fi
         
-        filesystem_applications=$(echo "$filesystem_applications" | sort)
+        filesystem_workloads=$(echo "$filesystem_workloads" | sort)
         
-        print_info "Applications found in filesystem:"
-        echo "$filesystem_applications" | while read app; do
+        print_info "Workloads found in filesystem:"
+        echo "$filesystem_workloads" | while read app; do
             if [ -n "$app" ]; then
                 print_info "  - $app"
             fi
@@ -239,25 +239,25 @@ jobs:
         missing_in_stack_mk=()
         extra_in_stack_mk=()
         
-        # Check for applications in filesystem but not in stack.mk
+        # Check for workloads in filesystem but not in stack.mk
         while IFS= read -r app; do
-            if [ -n "$app" ] && ! echo "$stack_mk_applications" | grep -q "^$app$"; then
+            if [ -n "$app" ] && ! echo "$stack_mk_workloads" | grep -q "^$app$"; then
                 missing_in_stack_mk+=("$app")
             fi
-        done <<< "$filesystem_applications"
+        done <<< "$filesystem_workloads"
         
-        # Check for applications in stack.mk but not in filesystem
+        # Check for workloads in stack.mk but not in filesystem
         while IFS= read -r app; do
-            if [ -n "$app" ] && ! echo "$filesystem_applications" | grep -q "^$app$"; then
+            if [ -n "$app" ] && ! echo "$filesystem_workloads" | grep -q "^$app$"; then
                 extra_in_stack_mk+=("$app")
             fi
-        done <<< "$stack_mk_applications"
+        done <<< "$stack_mk_workloads"
         
         # Report results
         validation_failed=false
         
         if [ ${#missing_in_stack_mk[@]} -gt 0 ]; then
-            print_error "Applications found in filesystem but missing from stack.mk:"
+            print_error "Workloads found in filesystem but missing from stack.mk:"
             for app in "${missing_in_stack_mk[@]}"; do
                 print_error "  - $app"
             done
@@ -265,7 +265,7 @@ jobs:
         fi
         
         if [ ${#extra_in_stack_mk[@]} -gt 0 ]; then
-            print_error "Applications listed in stack.mk but not found in filesystem:"
+            print_error "Workloads listed in stack.mk but not found in filesystem:"
             for app in "${extra_in_stack_mk[@]}"; do
                 print_error "  - $app"
             done
@@ -273,7 +273,7 @@ jobs:
         fi
         
         # Create GitHub Actions summary
-        echo "## 📋 stack.mk Applications Validation" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 stack.mk Workloads Validation" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
         if [ "$validation_failed" = true ]; then
@@ -289,45 +289,45 @@ jobs:
             fi
             
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Rule:** All applications in the \`application/\` directory must be listed in the \`APPLICATION\` variable in \`stack.mk\`." >> $GITHUB_STEP_SUMMARY
+            echo "**Rule:** All workloads in the \`workload/\` directory must be listed in the \`WORKLOAD\` variable in \`stack.mk\`." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**To fix this issue:**" >> $GITHUB_STEP_SUMMARY
-            echo "1. Update the \`APPLICATION\` variable in \`stack.mk\`" >> $GITHUB_STEP_SUMMARY
-            echo "2. Add missing applications or remove extra ones" >> $GITHUB_STEP_SUMMARY
-            echo "3. Ensure the list matches exactly with the \`application/\` directory contents" >> $GITHUB_STEP_SUMMARY
+            echo "1. Update the \`WORKLOAD\` variable in \`stack.mk\`" >> $GITHUB_STEP_SUMMARY
+            echo "2. Add missing workloads or remove extra ones" >> $GITHUB_STEP_SUMMARY
+            echo "3. Ensure the list matches exactly with the \`workload/\` directory contents" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**This policy ensures:**" >> $GITHUB_STEP_SUMMARY
             echo "• Consistency between filesystem and build configuration" >> $GITHUB_STEP_SUMMARY
-            echo "• All applications are included in build processes" >> $GITHUB_STEP_SUMMARY
+            echo "• All workloads are included in build processes" >> $GITHUB_STEP_SUMMARY
             echo "• Proper automation of CI/CD workflows" >> $GITHUB_STEP_SUMMARY
         else
             echo "### ✅ Validation Passed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "All applications in the filesystem are properly listed in stack.mk" >> $GITHUB_STEP_SUMMARY
+            echo "All workloads in the filesystem are properly listed in stack.mk" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Applications verified:** $(echo "$filesystem_applications" | wc -l)" >> $GITHUB_STEP_SUMMARY
+            echo "**Workloads verified:** $(echo "$filesystem_workloads" | wc -l)" >> $GITHUB_STEP_SUMMARY
         fi
         
         if [ "$validation_failed" = true ]; then
             print_error ""
-            print_error "stack.mk APPLICATION VALIDATION FAILED"
+            print_error "stack.mk WORKLOAD VALIDATION FAILED"
             print_error ""
-            print_error "The APPLICATION list in stack.mk does not match the applications in the filesystem."
+            print_error "The WORKLOAD list in stack.mk does not match the workloads in the filesystem."
             print_error ""
-            print_error "Current stack.mk APPLICATION: $(echo "$stack_mk_applications" | tr '\n' ' ')"
-            print_error "Expected based on filesystem: $(echo "$filesystem_applications" | tr '\n' ' ')"
+            print_error "Current stack.mk WORKLOAD: $(echo "$stack_mk_workloads" | tr '\n' ' ')"
+            print_error "Expected based on filesystem: $(echo "$filesystem_workloads" | tr '\n' ' ')"
             print_error ""
-            print_error "Please update the APPLICATION variable in stack.mk to match the filesystem."
+            print_error "Please update the WORKLOAD variable in stack.mk to match the filesystem."
             exit 1
         else
-            print_success "All applications are properly listed in stack.mk"
+            print_success "All workloads are properly listed in stack.mk"
         fi
 
   version-validation:
     name: Validate VERSION Files
     runs-on: ubuntu-latest
-    needs: check-application-changes
-    if: needs.check-application-changes.outputs.has-application-changes == 'true'
+    needs: check-workload-changes
+    if: needs.check-workload-changes.outputs.has-workload-changes == 'true'
     
     steps:
     - name: Checkout code
@@ -370,9 +370,9 @@ jobs:
 
         # Check if a file matches any pattern in the given service's .dockerignore
         # (e.g. *.cnf, *.env, *.key) - such files are excluded from the built image
-        # and shouldn't count as application changes requiring a version bump.
+        # and shouldn't count as workload changes requiring a version bump.
         matches_dockerignore() {
-            local service="$1" fname="$2" dockerignore_file="application/$1/.dockerignore"
+            local service="$1" fname="$2" dockerignore_file="workload/$1/.dockerignore"
             [ -f "$dockerignore_file" ] || return 1
             while IFS= read -r pattern; do
                 pattern="${pattern%%#*}"
@@ -472,15 +472,15 @@ jobs:
         
         print_info "Found commits in PR: $(echo "$commits_in_pr" | wc -l) commits"
         
-        # Check for application changes in the commits in PR
-        applications=()
+        # Check for workload changes in the commits in PR
+        workloads=()
         
-        # Collect all applications that have changes (excluding certain files)
+        # Collect all workloads that have changes (excluding certain files)
         while IFS= read -r commit; do
             files_changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
             while IFS= read -r file; do
-                if [[ $file == application/* ]]; then
-                    application_name=$(echo $file | cut -d'/' -f2)
+                if [[ $file == workload/* ]]; then
+                    workload_name=$(echo $file | cut -d'/' -f2)
                     
                     # Extract the file name from the path
                     filename=$(basename "$file")
@@ -490,68 +490,68 @@ jobs:
                        [[ "$filename" == "Makefile" ]] || \
                        [[ "$filename" == "docker-compose.yaml" ]] || \
                        [[ "$filename" == ".dockerignore" ]] || \
-                       matches_dockerignore "$application_name" "$filename"; then
+                       matches_dockerignore "$workload_name" "$filename"; then
                         print_info "Skipping file (excluded from validation trigger): $file"
                         continue
                     fi
                     
-                    if [[ ! " ${applications[@]} " =~ " ${application_name} " ]]; then
-                        applications+=("$application_name")
+                    if [[ ! " ${workloads[@]} " =~ " ${workload_name} " ]]; then
+                        workloads+=("$workload_name")
                     fi
                 fi
             done <<< "$files_changed"
         done <<< "$commits_in_pr"
         
-        if [ ${#applications[@]} -eq 0 ]; then
-            print_info "No applications modified. Skipping validation."
+        if [ ${#workloads[@]} -eq 0 ]; then
+            print_info "No workloads modified. Skipping validation."
             exit 0
         fi
         
-        print_info "Applications with changes: ${applications[*]}"
+        print_info "Workloads with changes: ${workloads[*]}"
         
-        # Check for version-only updates without application modifications
+        # Check for version-only updates without workload modifications
         print_info "=== VERSION-ONLY UPDATE PREVENTION ==="
-        version_only_updates=()
+        version_only_workloads=()
         
         # Get all VERSION files that were modified in this PR
-        modified_version_files=$(git diff --name-only prod-v1..HEAD | grep "^application/.*/VERSION$" || true)
+        modified_version_files=$(git diff --name-only prod-v1..HEAD | grep "^workload/.*/VERSION$" || true)
         
         if [ -n "$modified_version_files" ]; then
             while IFS= read -r version_file; do
                 if [ -n "$version_file" ]; then
-                    application_name=$(echo "$version_file" | cut -d'/' -f2)
+                    workload_name=$(echo "$version_file" | cut -d'/' -f2)
                     
-                    # Check if only VERSION file was modified for this application (no other significant application files)
-                    application_files_modified=$(git diff --name-only prod-v1..HEAD | grep "^application/$application_name/" | grep -v "^application/$application_name/VERSION$" | while IFS= read -r file; do
+                    # Check if only VERSION file was modified for this workload (no other significant workload files)
+                    workload_files_modified=$(git diff --name-only prod-v1..HEAD | grep "^workload/$workload_name/" | grep -v "^workload/$workload_name/VERSION$" | while IFS= read -r file; do
                         filename=$(basename "$file")
                         # Skip excluded files that don't count as significant changes
                         if [[ "$filename" != "CHANGELOG.md" ]] && \
                            [[ "$filename" != "Makefile" ]] && \
                            [[ "$filename" != "docker-compose.yaml" ]] && \
                            [[ "$filename" != ".dockerignore" ]] && \
-                           ! matches_dockerignore "$application_name" "$filename"; then
+                           ! matches_dockerignore "$workload_name" "$filename"; then
                             echo "$file"
                         fi
                     done)
                     
-                    if [ -z "$application_files_modified" ]; then
-                        version_only_updates+=("$application_name")
-                        print_error "❌ $application_name: Only VERSION file was modified, no actual application changes detected"
+                    if [ -z "$workload_files_modified" ]; then
+                        version_only_workloads+=("$workload_name")
+                        print_error "❌ $workload_name: Only VERSION file was modified, no actual workload changes detected"
                     else
-                        print_success "✅ $application_name: VERSION file modified along with actual application changes"
+                        print_success "✅ $workload_name: VERSION file modified along with actual workload changes"
                     fi
                 fi
             done <<< "$modified_version_files"
         fi
         
         # If there are version-only updates, fail the validation
-        if [ ${#version_only_updates[@]} -gt 0 ]; then
+        if [ ${#version_only_workloads[@]} -gt 0 ]; then
             print_error ""
             print_error "VERSION-ONLY UPDATE PREVENTION FAILED"
             print_error ""
-            print_error "Applications with version-only updates: ${version_only_updates[*]}"
+            print_error "Workloads with version-only updates: ${version_only_workloads[*]}"
             print_error ""
-            print_error "Rule: VERSION files should only be updated when there are actual application changes."
+            print_error "Rule: VERSION files should only be updated when there are actual workload changes."
             print_error ""
             print_error "This policy prevents:"
             print_error "• Empty version bumps without functionality changes"
@@ -559,36 +559,36 @@ jobs:
             print_error "• Confusion in release tracking"
             print_error ""
             print_error "To fix this issue:"
-            print_error "1. Either make actual changes to the application code, or"
-            print_error "2. Revert the VERSION file changes if no application changes are needed"
+            print_error "1. Either make actual changes to the workload code, or"
+            print_error "2. Revert the VERSION file changes if no workload changes are needed"
             
             # Create summary for version-only updates
             echo "## ❌ Version-Only Updates Detected" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Applications with version-only updates:** ${version_only_updates[*]}" >> $GITHUB_STEP_SUMMARY
+            echo "**Workloads with version-only updates:** ${version_only_workloads[*]}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Rule Violation:** VERSION files were updated without corresponding application changes." >> $GITHUB_STEP_SUMMARY
+            echo "**Rule Violation:** VERSION files were updated without corresponding workload changes." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Why this is not allowed:**" >> $GITHUB_STEP_SUMMARY
             echo "• Prevents misleading version increments" >> $GITHUB_STEP_SUMMARY
             echo "• Ensures versions reflect actual functionality changes" >> $GITHUB_STEP_SUMMARY
             echo "• Maintains clear release tracking" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**To fix:** Either add actual application changes or revert VERSION file changes." >> $GITHUB_STEP_SUMMARY
+            echo "**To fix:** Either add actual workload changes or revert VERSION file changes." >> $GITHUB_STEP_SUMMARY
             
             exit 1
         fi
         
-        # Validate all changed applications have updated versions from base branch
+        # Validate all changed workloads have updated versions from base branch
         print_info "=== VERSION UPDATE VALIDATION ==="
         version_validation_failed=false
         version_validation_details=""
         
-        for application in "${applications[@]}"; do
-            version_file="application/$application/VERSION"
+        for workload in "${workloads[@]}"; do
+            version_file="workload/$workload/VERSION"
             
             if [ ! -f "$version_file" ]; then
-                print_warning "VERSION file not found for application $application. Skipping version validation."
+                print_warning "VERSION file not found for workload $workload. Skipping version validation."
                 continue
             fi
             
@@ -599,21 +599,21 @@ jobs:
             if git show prod-v1:"$version_file" &>/dev/null; then
                 base_version=$(git show prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
             else
-                print_warning "VERSION file for $application not found in base branch (prod-v1). Using 0.0.0 as base."
+                print_warning "VERSION file for $workload not found in base branch (prod-v1). Using 0.0.0 as base."
                 base_version="0.0.0"
             fi
             
-            print_info "Application: $application | Base: $base_version | Current: $current_version"
+            print_info "Workload: $workload | Base: $base_version | Current: $current_version"
             
             # Check if version was updated from base branch
             if [ "$current_version" = "$base_version" ]; then
-                print_error "VERSION file for application '$application' was not updated from base branch"
+                print_error "VERSION file for workload '$workload' was not updated from base branch"
                 print_error "  Base branch version: $base_version"
                 print_error "  Current version: $current_version"
-                print_error "  Application has changes but version remains the same!"
+                print_error "  Workload has changes but version remains the same!"
                 version_validation_failed=true
                 
-                version_validation_details+="❌ **$application**: Version not updated from base branch\\n"
+                version_validation_details+="❌ **$workload**: Version not updated from base branch\\n"
                 version_validation_details+="   - Base: \`$base_version\` → Current: \`$current_version\`\\n"
                 version_validation_details+="   - Suggested patch: \`$(echo $current_version | awk -F. '{print $1"."$2"."($3+1)}')\`\\n"
                 version_validation_details+="   - Suggested minor: \`$(echo $current_version | awk -F. '{print $1"."($2+1)".0"}')\`\\n\\n"
@@ -622,17 +622,17 @@ jobs:
                 if ! [[ $current_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                     print_error "Invalid version format in $version_file. Expected format: x.y.z"
                     version_validation_failed=true
-                    version_validation_details+="❌ **$application**: Invalid version format \`$current_version\`\\n"
+                    version_validation_details+="❌ **$workload**: Invalid version format \`$current_version\`\\n"
                     continue
                 fi
                 
                 # Validate version increment
                 if ! validate_version_increment "$base_version" "$current_version"; then
                     version_validation_failed=true
-                    version_validation_details+="❌ **$application**: Invalid version increment \`$base_version\` → \`$current_version\`\\n"
+                    version_validation_details+="❌ **$workload**: Invalid version increment \`$base_version\` → \`$current_version\`\\n"
                 else
-                    print_success "Version validation passed for $application: $base_version -> $current_version"
-                    version_validation_details+="✅ **$application**: Valid version increment \`$base_version\` → \`$current_version\`\\n"
+                    print_success "Version validation passed for $workload: $base_version -> $current_version"
+                    version_validation_details+="✅ **$workload**: Valid version increment \`$base_version\` → \`$current_version\`\\n"
                 fi
             fi
         done
@@ -640,19 +640,19 @@ jobs:
         # Create GitHub Actions summary
         echo "## 🔍 Version Validation Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Applications analyzed:** ${applications[*]}" >> $GITHUB_STEP_SUMMARY
+        echo "**Workloads analyzed:** ${workloads[*]}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo -e "$version_validation_details" >> $GITHUB_STEP_SUMMARY
         
-        # If any application failed version validation, exit with error
+        # If any workload failed version validation, exit with error
         if [ "$version_validation_failed" = true ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ❌ Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Rule:** All modified applications must have their VERSION files updated from the base branch." >> $GITHUB_STEP_SUMMARY
+            echo "**Rule:** All modified workloads must have their VERSION files updated from the base branch." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**To fix this issue:**" >> $GITHUB_STEP_SUMMARY
-            echo "1. Update the VERSION file for each failing application" >> $GITHUB_STEP_SUMMARY
+            echo "1. Update the VERSION file for each failing workload" >> $GITHUB_STEP_SUMMARY
             echo "2. Follow semantic versioning rules (major.minor.patch)" >> $GITHUB_STEP_SUMMARY
             echo "3. Commit the version changes and push again" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -668,7 +668,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ✅ All Validations Passed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "All modified applications have properly updated VERSION files following semantic versioning rules." >> $GITHUB_STEP_SUMMARY
+            echo "All modified workloads have properly updated VERSION files following semantic versioning rules." >> $GITHUB_STEP_SUMMARY
             
-            print_success "Version validation passed: All applications have updated versions from base branch"
+            print_success "Version validation passed: All workloads have updated versions from base branch"
         fi

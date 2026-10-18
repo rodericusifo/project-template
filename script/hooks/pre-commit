@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Pre-commit hook for single service per commit
-# This hook ensures only one service is modified per commit
+# Pre-commit hook for single workload per commit
+# This hook ensures only one workload is modified per commit
 
 set -e
 
@@ -29,7 +29,7 @@ print_info() {
     echo -e "${BLUE}INFO: $1${NC}"
 }
 
-print_info "Running pre-commit hook for conventional commit and single service validation..."
+print_info "Running pre-commit hook for conventional commit and single workload validation..."
 
 # Check if this is a merge or revert commit by examining the git state
 # Skip validation for merge commits
@@ -52,38 +52,38 @@ if [ -z "$staged_files" ]; then
     exit 0
 fi
 
-# Check for application files
-application_files_modified=false
+# Check for workload files
+workload_files_modified=false
 changed_services=()
 
 while IFS= read -r file; do
-    if [[ $file == application/* ]]; then
-        application_files_modified=true
-        service_name=$(echo "$file" | cut -d'/' -f2)
-        if [[ ! " ${changed_services[@]} " =~ " ${service_name} " ]]; then
-            changed_services+=("$service_name")
+    if [[ $file == workload/* ]]; then
+        workload_files_modified=true
+        workload_name=$(echo "$file" | cut -d'/' -f2)
+        if [[ ! " ${changed_services[@]} " =~ " ${workload_name} " ]]; then
+            changed_services+=("$workload_name")
         fi
     fi
 done <<< "$staged_files"
 
-# If no application changes, skip service validation
-if [ "$application_files_modified" = false ]; then
-    print_info "No application files modified. Skipping service validation."
+# If no workload changes, skip workload validation
+if [ "$workload_files_modified" = false ]; then
+    print_info "No workload files modified. Skipping workload validation."
 else
-    # CASE 2: Only one service allowed per commit
+    # CASE 2: Only one workload allowed per commit
     if [ ${#changed_services[@]} -gt 1 ]; then
         print_error "Multiple services modified in this commit: ${changed_services[*]}"
-        print_error "Only one service allowed per commit."
+        print_error "Only one workload allowed per commit."
         print_error ""
         print_error "This helps maintain:"
-        print_error "  • Clear version history per service"
+        print_error "  • Clear version history per workload"
         print_error "  • Easier rollbacks and debugging"
-        print_error "  • Independent service deployments"
+        print_error "  • Independent workload deployments"
         print_error "  • Better code review process"
         exit 1
     fi
     
-    print_success "Single service validation passed: ${changed_services[0]}"
+    print_success "Single workload validation passed: ${changed_services[0]}"
 fi
 
 print_success "Pre-commit validation completed successfully!"

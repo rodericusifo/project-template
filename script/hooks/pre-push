@@ -29,11 +29,11 @@ print_info() {
     echo -e "${BLUE}INFO: $1${NC}"
 }
 
-# Check if a file matches any pattern in the given service's .dockerignore
+# Check if a file matches any pattern in the given workload's .dockerignore
 # (e.g. *.cnf, *.env, *.key) - such files are excluded from the built image
-# and shouldn't count as application changes requiring a version bump.
+# and shouldn't count as workload changes requiring a version bump.
 matches_dockerignore() {
-    local service="$1" fname="$2" dockerignore_file="application/$1/.dockerignore"
+    local workload="$1" fname="$2" dockerignore_file="workload/$1/.dockerignore"
     [ -f "$dockerignore_file" ] || return 1
     while IFS= read -r pattern; do
         pattern="${pattern%%#*}"
@@ -161,15 +161,15 @@ fi
 
 print_info "Found commits to push: $(echo "$commits_being_pushed" | wc -l) commits"
 
-# Check for application changes in the commits being pushed
-application_services=()
+# Check for workload changes in the commits being pushed
+workload_units=()
 
-# Collect all application services that have changes (excluding certain files)
+# Collect all workload units that have changes (excluding certain files)
 while IFS= read -r commit; do
     files_changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
     while IFS= read -r file; do
-        if [[ $file == application/* ]]; then
-            service_name=$(echo $file | cut -d'/' -f2)
+        if [[ $file == workload/* ]]; then
+            workload_name=$(echo $file | cut -d'/' -f2)
             
             # Extract the file name from the path
             filename=$(basename "$file")
@@ -179,36 +179,36 @@ while IFS= read -r commit; do
                [[ "$filename" == "Makefile" ]] || \
                [[ "$filename" == "docker-compose.yaml" ]] || \
                [[ "$filename" == ".dockerignore" ]] || \
-               matches_dockerignore "$service_name" "$filename"; then
+               matches_dockerignore "$workload_name" "$filename"; then
                 print_info "Skipping file (excluded from validation trigger): $file"
                 continue
             fi
 
-            if [[ ! " ${application_services[@]} " =~ " ${service_name} " ]]; then
-                application_services+=("$service_name")
+            if [[ ! " ${workload_units[@]} " =~ " ${workload_name} " ]]; then
+                workload_units+=("$workload_name")
             fi
         fi
     done <<< "$files_changed"
 done <<< "$commits_being_pushed"
 
-if [ ${#application_services[@]} -eq 0 ]; then
-    print_info "No application services modified. Skipping validation."
+if [ ${#workload_units[@]} -eq 0 ]; then
+    print_info "No workload units modified. Skipping validation."
     exit 0
 fi
 
-print_info "Application services with changes: ${application_services[*]}"
+print_info "Workload services with changes: ${workload_units[*]}"
 
-# Validate all changed applications have updated versions from base branch
+# Validate all changed workloads have updated versions from base branch
 print_info "=== VERSION UPDATE VALIDATION ==="
 version_validation_failed=false
 
-for service in "${application_services[@]}"; do
-    version_file="application/$service/VERSION"
+for workload in "${workload_units[@]}"; do
+    version_file="workload/$workload/VERSION"
 
     # Read the committed state at HEAD, not the working tree - an uncommitted
     # VERSION bump must not be able to satisfy this check.
     if ! git show "HEAD:$version_file" &>/dev/null; then
-        print_warning "VERSION file not found for service $service at HEAD. Skipping version validation."
+        print_warning "VERSION file not found for workload $workload at HEAD. Skipping version validation."
         continue
     fi
 
@@ -219,15 +219,15 @@ for service in "${application_services[@]}"; do
     if git show origin/prod-v1:"$version_file" &>/dev/null; then
         base_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
     else
-        print_warning "VERSION file for $service not found in base branch (prod-v1). Using 0.0.0 as base."
+        print_warning "VERSION file for $workload not found in base branch (prod-v1). Using 0.0.0 as base."
         base_version="0.0.0"
     fi
     
-    print_info "Service: $service | Base: $base_version | Current: $current_version"
+    print_info "Service: $workload | Base: $base_version | Current: $current_version"
     
     # Check if version was updated from base branch
     if [ "$current_version" = "$base_version" ]; then
-        print_error "VERSION file for service '$service' was not updated from base branch"
+        print_error "VERSION file for workload '$workload' was not updated from base branch"
         print_error "  Base branch version: $base_version"
         print_error "  Current version: $current_version"
         print_error "  Service has changes but version remains the same!"
@@ -235,7 +235,7 @@ for service in "${application_services[@]}"; do
     fi
 done
 
-# If any service failed version validation, exit with error
+# If any workload failed version validation, exit with error
 if [ "$version_validation_failed" = true ]; then
     print_error ""
     print_error "VERSION UPDATE VALIDATION FAILED"
@@ -243,9 +243,9 @@ if [ "$version_validation_failed" = true ]; then
     print_error "Rule: All modified services must have their VERSION files updated from the base branch."
     print_error ""
     print_error "To fix this issue:"
-    print_error "1. For each modified service, update its VERSION file:"
-    for service in "${application_services[@]}"; do
-        version_file="application/$service/VERSION"
+    print_error "1. For each modified workload, update its VERSION file:"
+    for workload in "${workload_units[@]}"; do
+        version_file="workload/$workload/VERSION"
         if git show "HEAD:$version_file" &>/dev/null; then
             current_version=$(git show "HEAD:$version_file" | tr -d '\n\r' | tr -d ' ')
             base_version=""
@@ -256,7 +256,7 @@ if [ "$version_validation_failed" = true ]; then
             fi
             
             if [ "$current_version" = "$base_version" ]; then
-                print_error "   - $service: Edit application/$service/VERSION"
+                print_error "   - $workload: Edit workload/$workload/VERSION"
                 print_error "     Current: $current_version"
                 print_error "     Suggested patch: $(echo $current_version | awk -F. '{print $1"."$2"."($3+1)}')"
                 print_error "     Suggested minor: $(echo $current_version | awk -F. '{print $1"."($2+1)".0"}')"
@@ -275,12 +275,12 @@ fi
 
 print_success "Version update validation passed: All services have updated versions from base branch"
 
-# Process each service
-for service in "${application_services[@]}"; do
-    version_file="application/$service/VERSION"
+# Process each workload
+for workload in "${workload_units[@]}"; do
+    version_file="workload/$workload/VERSION"
 
     if ! git show "HEAD:$version_file" &>/dev/null; then
-        print_warning "VERSION file not found for service $service at HEAD. Skipping."
+        print_warning "VERSION file not found for workload $workload at HEAD. Skipping."
         continue
     fi
 
@@ -296,21 +296,21 @@ for service in "${application_services[@]}"; do
         previous_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
         print_info "Found previous version from base branch (prod-v1): $previous_version"
     else
-        print_warning "VERSION file for $service not found in base branch (prod-v1). This might be a new service."
+        print_warning "VERSION file for $workload not found in base branch (prod-v1). This might be a new workload."
     fi
 
     # If no previous version found, use a default
     if [ -z "$previous_version" ]; then
-        print_warning "No previous version found for service $service. Using 0.0.0 as default."
+        print_warning "No previous version found for workload $workload. Using 0.0.0 as default."
         previous_version="0.0.0"
     fi
     # If no current version found, use a default
     if [ -z "$current_version" ]; then
-        print_warning "No current version found for service $service. Using 0.0.0 as default."
+        print_warning "No current version found for workload $workload. Using 0.0.0 as default."
         current_version="0.0.0"
     fi
     
-    print_info "Service: $service"
+    print_info "Service: $workload"
     print_info "Previous version: $previous_version"
     print_info "Current version: $current_version"
     
@@ -325,7 +325,7 @@ for service in "${application_services[@]}"; do
         fi
 
         if ! [[ $previous_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            print_error "Invalid previous version format for $service: '$previous_version' (from base branch). Expected format: x.y.z"
+            print_error "Invalid previous version format for $workload: '$previous_version' (from base branch). Expected format: x.y.z"
             exit 1
         fi
 
@@ -334,7 +334,7 @@ for service in "${application_services[@]}"; do
             exit 1
         fi
         
-        print_success "Version validation passed for $service: $previous_version -> $current_version"
+        print_success "Version validation passed for $workload: $previous_version -> $current_version"
     fi
 done
 

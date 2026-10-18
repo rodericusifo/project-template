@@ -76,42 +76,42 @@ jobs:
         set -e
 
         # Initialize table content
-        table_content="| Application | Old Version | New Version | Status | Changelog Link |\n"
+        table_content="| Workload | Old Version | New Version | Status | Changelog Link |\n"
         table_content+="|-------------|-------------|-------------|--------|----------------|\n"
 
-        # Get applications from stack.mk file
+        # Get workloads from stack.mk file
         if [ ! -f "stack.mk" ]; then
           echo "❌ Error: stack.mk file not found in repository root"
-          echo "The stack.mk file is required to determine which applications to include in the release"
+          echo "The stack.mk file is required to determine which workloads to include in the release"
           exit 1
         fi
 
-        applications_line=$(grep "^APPLICATION" stack.mk | head -1)
-        if [ -z "$applications_line" ]; then
-          echo "❌ Error: APPLICATION variable not found in stack.mk"
-          echo "Please define APPLICATION in stack.mk file with format: APPLICATION := app1 app2 app3"
+        workloads_line=$(grep "^WORKLOAD" stack.mk | head -1)
+        if [ -z "$workloads_line" ]; then
+          echo "❌ Error: WORKLOAD variable not found in stack.mk"
+          echo "Please define WORKLOAD in stack.mk file with format: WORKLOAD := app1 app2 app3"
           exit 1
         fi
 
-        # Extract applications from the line (remove APPLICATION := and convert to array)
-        applications_string=$(echo "$applications_line" | sed 's/^APPLICATION[[:space:]]*:=[[:space:]]*//')
+        # Extract workloads from the line (remove WORKLOAD := and convert to array)
+        workloads_string=$(echo "$workloads_line" | sed 's/^WORKLOAD[[:space:]]*:=[[:space:]]*//')
 
-        if [ -z "$applications_string" ]; then
-          echo "❌ Error: APPLICATION variable is empty in stack.mk"
-          echo "Please define applications in stack.mk file with format: APPLICATION := app1 app2 app3"
+        if [ -z "$workloads_string" ]; then
+          echo "❌ Error: WORKLOAD variable is empty in stack.mk"
+          echo "Please define workloads in stack.mk file with format: WORKLOAD := app1 app2 app3"
           exit 1
         fi
 
         # Convert space-separated string to array
-        read -ra applications <<< "$applications_string"
-        echo "✅ Found applications in stack.mk: ${applications[*]} (${#applications[@]} total)"
+        read -ra workloads <<< "$workloads_string"
+        echo "✅ Found workloads in stack.mk: ${workloads[*]} (${#workloads[@]} total)"
 
         # Get previous versions from git history if previous release exists
         prev_tag="${{ steps.prev_release.outputs.prev_tag }}"
 
-        for application in "${applications[@]}"; do
-          version_file="application/$application/VERSION"
-          changelog_file="application/$application/CHANGELOG.md"
+        for workload in "${workloads[@]}"; do
+          version_file="workload/$workload/VERSION"
+          changelog_file="workload/$workload/CHANGELOG.md"
 
           if [ -f "$version_file" ]; then
             current_version=$(cat "$version_file" | tr -d '\n\r' | xargs)
@@ -152,18 +152,18 @@ jobs:
             # Create changelog link if file exists
             changelog_link=""
             if [ -f "$changelog_file" ]; then
-              changelog_link="[View](application/$application/CHANGELOG.md)"
+              changelog_link="[View](workload/$workload/CHANGELOG.md)"
             else
               changelog_link="N/A"
             fi
 
             # Add row to table
-            table_content+="| $application | $old_version | $current_version | $status_icon | $changelog_link |\n"
+            table_content+="| $workload | $old_version | $current_version | $status_icon | $changelog_link |\n"
 
-            echo "Application: $application, Old: $old_version, New: $current_version, Status: $status_icon"
+            echo "Workload: $workload, Old: $old_version, New: $current_version, Status: $status_icon"
           else
-            echo "Warning: VERSION file not found for $application"
-            table_content+="| $application | N/A | N/A | ❌ Missing | N/A |\n"
+            echo "Warning: VERSION file not found for $workload"
+            table_content+="| $workload | N/A | N/A | ❌ Missing | N/A |\n"
           fi
         done
 
@@ -196,9 +196,9 @@ jobs:
 
         ## 🐳 Docker Images
 
-        All applications have been built and pushed to:
-        - **Docker Hub**: \`${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}-{application}:v{version}\`
-        - **GitHub Container Registry**: \`ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-{application}:v{version}\`
+        All workloads have been built and pushed to:
+        - **Docker Hub**: \`${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}-{workload}:v{version}\`
+        - **GitHub Container Registry**: \`ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-{workload}:v{version}\`
 
         ## 📝 Additional Information
 

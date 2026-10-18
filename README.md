@@ -1,299 +1,125 @@
-# 🧱 API Template
+# 🧱 Project Template
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/yourrepo/actions)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/rodericusifo/api-template/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Made with ❤️](https://img.shields.io/badge/Made%20with-%E2%9D%A4-red)](#)
 
----
+A practical starting point for projects that need a consistent repository
+layout, repeatable local setup, and automated delivery.
 
-A **containerized starter framework** tailored for developing robust and high-performance backend APIs. Built for **scalability**, **maintainability**, and **team productivity**.
+The repository provides the surrounding structure rather than prescribing what
+the project must build. The checked-in workloads and Docker Compose files form
+one working example; they can be replaced without changing the repository's
+core conventions.
 
-This template includes:
+## 🧰 What This Provides
 
-- 🧱 Modular structure for API services
-- 🐳 Docker for consistent environments
-- 📁 SQL + cache + messaging integrations
-- 🛠️ Developer-friendly Makefile workflow
-- ✅ Production-ready setup with best practices
+- A predictable place for workloads, supporting resources, and maintenance
+  scripts
+- Make-based entry points for local setup and lifecycle commands
+- Environment-file bootstrapping from checked-in examples
+- Optional Docker Compose orchestration for local dependencies
+- Git hooks and GitHub Actions for validation, versioning, and releases
 
----
+## 📚 Guides
 
-## 📦 Features
+Read the guide closest to the change you are making:
 
-- ✅ Rapid setup using `make`
-- 🧩 Scalable microservices architecture
-- 🐘 PostgreSQL with initialization scripts
-- 🚀 Redpanda & LavinMQ support for messaging
-- 🔐 Environment isolation via `.env` files
-- 🧠 Redis caching support
+- [Workloads](workload/README.md)
+- [Infrastructure](infrastructure/README.md)
+- [Repository scripts](script/README.md)
+- [GitHub Actions](.github/workflows/README.md)
 
----
+## 🗂️ Repository Layout
 
-## 🚀 Quick Start
+```text
+.
+├── workload/              Buildable or runnable project units
+├── infrastructure/        Optional local dependencies
+├── script/                Setup scripts and Git hooks
+├── .github/workflows/     Validation and delivery automation
+├── Makefile               Repository-level commands
+└── stack.mk               Default workload and dependency selections
+```
 
-### 🧰 Prerequisites
+The included workload and infrastructure directories are an executable
+example. The repository-level conventions are the reusable part of the
+template.
 
-- [Docker](https://docs.docker.com/get-docker/)
-- `make` utility
+## 🚀 Getting Started
 
-#### Install `make`
+The commands below operate the repository's included example. Adapt
+`stack.mk`, the workload directories, and the infrastructure definitions when
+using the template for another project.
 
-- **Windows**
-  - Install [Chocolatey](https://chocolatey.org/install)
-  - Then: `choco install make`
+### ✅ Requirements
 
-- **macOS / Linux**
-  - Install [Homebrew](https://brew.sh)
-  - Then: `brew install make`
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- `make`
+- Tools required by the workloads you keep or add
 
----
+### ⚙️ Setup
 
-### 🛠️ Installation
-
-1. **Initialize Database Scripts**
-
-   Edit your initdb scripts in `path/to/initdb/db.sh` by adding required databases:
+1. Review the selections in [stack.mk](stack.mk).
+2. Generate local configuration files:
 
    ```bash
-   CREATE DATABASE service_a_db;
-   CREATE DATABASE service_b_db;
+   make setup-env ENV=dev
    ```
 
-> **Note:** Replace `<database-sql>` with your actual database type, such as `postgres`.
-
-2. **Copy `.env` Files**
-
-   ```bash
-   make setup-env ENV=<ENV>
-   ```
-
-> Replace `<ENV>` with your desired environment name (e.g. `dev`, `prod`, etc.)
-
-   Fill empty values:
-
-   ```dotenv
-   # <ENV>.env file
-   FIELD_A="HelloWorld"
-   FIELD_B=1
-   FIELD_C=true
-   ```
-
-> **Note:** If you use LavinMQ as one of your message messaging, set `MESSAGING_LAVINMQ_MAIN_DEFAULT_PASSWORD_HASH` using a **hashed password**.
-> You can generate a hashed password by following these steps:
->
-> 1. Run a temporary LavinMQ container:
->
->    ```bash
->    docker run -d --name lavinmq_temp -p 5672:5672 -p 15672:15672 cloudamqp/lavinmq
->    ```
->
-> 2. Generate the **hashed password**:
->
->    ```bash
->    docker exec -it lavinmq_temp lavinmqctl hash_password yourdesiredpassword
->    ```
->
->    Use the result to set `MESSAGING_LAVINMQ_MAIN_DEFAULT_PASSWORD_HASH`.
->
-> 3. Remove the temporary container:
->
->    ```bash
->    docker rm -f lavinmq_temp
->    ```
-
-3. **Define Services**
-
-   Edit `stack.mk`:
-
-   ```makefile
-   APPLICATION := auth-service author-service category-service book-service api-gateway
-   MESSAGING := redpanda lavinmq
-   CACHE := redis
-   DATABASE_SQL := postgres
-   ```
-
-4. **Set Up Git Hooks (Required for Development)**
+3. Fill in the generated values. Do not commit credentials or generated
+   environment files.
+4. Install the repository hooks:
 
    ```bash
    make setup-hooks
    ```
 
-   This installs development hooks that enforce project standards:
+5. Start and stop the included example:
 
-   - ✅ **Pre-commit**: Ensures only one service is modified per commit
-   - ✅ **Commit-msg**: Validates conventional commit format (`type(scope): description`)
-     - Supported types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
-     - Example: `feat(auth-service): add login feature`
-   - ✅ **Pre-push**: Comprehensive version validation
-     - Enforces semantic versioning (`x.y.z` format)
-     - Prevents major version updates (except `0.x.x` → `1.0.0`)
-     - Limits minor/patch increments to 1
-     - Ensures VERSION files are updated from base branch (`prod-v1`)
+   ```bash
+   make start ENV=dev
+   make stop ENV=dev
+   ```
 
-   All hooks automatically skip validation for merge and revert commits.
+Some included components require additional tools or credentials. Their
+individual guides document those requirements.
 
-> **Important**: All developers must run this command after cloning the repository.
+### 🧭 Common Commands
 
----
+| Command | Purpose |
+| --- | --- |
+| `make setup-env ENV=dev` | Create local environment files from examples |
+| `make setup-hooks` | Install repository Git hooks |
+| `make start ENV=dev` | Create the network and start dependencies and workloads |
+| `make stop ENV=dev` | Stop Compose projects while preserving volumes |
+| `make -n start ENV=dev` | Preview the commands without executing them |
 
-## 🔄 GitHub Workflows (CI/CD)
+`ENV` is required by lifecycle commands. Use a separate value for each local
+environment when you need isolated networks, Compose configuration, and
+volumes.
 
-This template includes automated GitHub workflows for streamlined development and deployment:
+## 🧩 Adapting the Template
 
-### 🛡️ **Pull Request Validations**
-*Triggered on: Pull Requests to `prod-v1`*
+Keep the repository-level Make targets if they fit your workflow, then replace
+the example workload and dependency definitions with the ones your project
+needs. Update the hook and workflow assumptions when your component layout,
+versioning policy, build system, or release process differs from the example.
 
-- ✅ **File validation**: Ensures required `CHANGELOG.md` and `VERSION` files exist for modified services
-- ✅ **Version validation**: Validates semantic versioning rules and format
-- ✅ **Changelog validation**: Verifies proper changelog format and content
-- ✅ **Service isolation**: Enforces one service per pull request policy
-- ✅ **Branch compliance**: Ensures changes follow base branch requirements
+At minimum, review these files when creating a new project from the template:
 
-### 📝 **Auto Create or Update Changelogs**
-*Triggered on: Push to `prod-v1` (application changes)*
+1. `stack.mk` for the units and dependencies to start.
+2. `workload/Makefile` for build, generation, and container assumptions.
+3. `infrastructure/*/Makefile` for supported dependency values and volumes.
+4. `script/hooks/*` for commit and versioning rules.
+5. `.github/workflows/*.yml` for branches, paths, registries, and secrets.
 
-- 🔄 **Automatic changelog updates**: Updates CHANGELOG.md files when applications are modified
-- 📅 **Smart formatting**: Maintains proper changelog structure and formatting
-- 🚫 **Loop prevention**: Ignores changelog file changes to prevent infinite loops
-- ⚡ **Concurrent safe**: Uses concurrency controls to prevent conflicts
-
-### 🏷️ **Auto Create Tags**
-*Triggered on: Workflow completion (Auto Create or Update Changelogs)*
-
-- 🚀 **Automatic tagging**: Creates Git tags based on VERSION file changes
-- 📦 **Service versioning**: Tags format: `service-name/vX.Y.Z` (e.g., `auth-service/v1.2.0`)
-- 🔄 **Version detection**: Compares current vs base branch versions
-- ✨ **Zero-config**: Works automatically after changelog updates
-
-### 🐳 **Push to Docker Hub**
-*Triggered on: Workflow completion (Auto Create Tags)*
-
-- 📤 **Automatic deployment**: Builds and pushes service images to Docker Hub after tagging
-- 🏷️ **Multi-tag support**: Creates both version-specific and `latest` tags
-- 🔐 **Secure authentication**: Uses Docker Hub secrets for registry access
-- 📦 **Batch processing**: Handles multiple services in parallel
-
-### 📦 **Push to GitHub Container Registry**
-*Triggered on: Workflow completion (Auto Create Tags)*
-
-- 🚀 **GHCR deployment**: Builds and pushes service images to GitHub Container Registry
-- 🔒 **Built-in auth**: Uses GitHub tokens for seamless authentication
-- 🏷️ **Tag management**: Same tagging strategy as Docker Hub workflow
-- 🌐 **Registry flexibility**: Supports both public and private container registries
-
-### 🎯 **Release Coordinator**
-*Triggered on: Workflow completion (Auto Create Tags)*
-
-- ⏱️ **Workflow orchestration**: Waits for all Docker build workflows to complete
-- 🚀 **Release trigger**: Dispatches release creation once all builds are finished
-- 📊 **Status monitoring**: Tracks the completion of both Docker Hub and GHCR pushes
-- 🔄 **Reliable sequencing**: Ensures proper order of deployment operations
-
-### 📋 **Auto Create Releases**
-*Triggered on: Repository dispatch (docker-builds-completed)*
-
-- 🎉 **Automated releases**: Creates GitHub releases with comprehensive version tables
-- 📊 **Version comparison**: Shows old vs new versions for all applications
-- 🏷️ **Release tagging**: Creates timestamped release tags
-- 📝 **Rich notes**: Includes deployment commands and Docker registry information
-
-### 🎯 **Workflow Chain Example**
-
-The workflows follow this automated sequence:
-
-```bash
-1. Developer pushes to prod-v1
-   ↓
-2. Auto Create or Update Changelogs runs
-   ↓
-3. Auto Create Tags runs (creates version tags)
-   ↓
-4. Both Docker Hub & GHCR Push workflows run in parallel
-   ↓
-5. Release Coordinator waits for both to complete
-   ↓
-6. Auto Create Releases runs (creates GitHub release)
-```
-
-**Pull Request validation:**
-```bash
-# Happens automatically on PR creation/updates
-git checkout -b feature/auth-improvements
-# ... make changes to auth-service ...
-git push origin feature/auth-improvements
-# → Creates PR → Triggers Pull Request Validations workflow
-```
-
----
-
-## ▶️ Usage
-
-### Start the application:
-
-```bash
-make start ENV=<ENV>
-```
-
-### Stop the application:
-
-```bash
-make stop ENV=<ENV>
-```
-
-> Make sure you already running `make setup-env ENV=<ENV>` command.
-> Replace `<ENV>` with your desired environment name (e.g. `dev`, `prod`, etc.).
-
----
-
-## 📚 API Documentation
-
-Test your APIs in Postman:
-
-[![Run in Postman](https://run.pstmn.io/button.svg)](https://app.getpostman.com/run-collection/10344918-49466c3c-b1e9-4b1c-b6d7-b33940099111?action=collection%2Ffork&source=rip_markdown&collection-url=entityId%3D10344918-49466c3c-b1e9-4b1c-b6d7-b33940099111%26entityType%3Dcollection%26workspaceId%3D667868fa-663b-45d5-a9ec-252ff52cb9c8)
-
----
-
-## 🧪 Tech Stack
-
-- **Language**: Go, Python, etc.
-- **Database**: PostgreSQL
-- **Cache**: Redis
-- **Messaging**: Redpanda, LavinMQ
-- **Containerization**: Docker
-- **Workflow**: Makefile
-
----
+Remove example-only tooling when it is not relevant. Keeping unused services,
+credentials, or publishing workflows enabled creates unnecessary maintenance
+and security risk.
 
 ## 🤝 Contributing
 
-Contributions are welcome! To contribute:
-
-1. Fork the repo
-2. Create your feature branch (`git checkout -b feature/foo`)
-3. Commit your changes (`git commit -am 'Add foo'`)
-4. Push to the branch (`git push origin feature/foo`)
-5. Create a new Pull Request
-
----
-
-## 📄 License & Notice
-
-This code is licensed under the [MIT License](./LICENSE).
-
-See the [NOTICE](./NOTICE) file for additional legal and attribution information.
-
-> © 2025 Rodericus Ifo Krista. Unauthorized commercial use or misrepresentation of authorship is prohibited.
-
----
-
-## 💬 Feedback
-
-Got questions or suggestions?
-
-- Open an [issue](https://github.com/rodericusifo/api-template/issues)
-- Or email us at: `rodericus1999@gmail.com`
-
----
-
-> Made with ❤️ by [Rodericus Ifo Krista](https://www.linkedin.com/in/rodericus-ifo-krista)
+Use a feature branch, keep changes focused, run the relevant checks, and
+follow the repository's commit and release conventions. See [NOTICE](NOTICE)
+and the [MIT License](LICENSE).

@@ -86,33 +86,33 @@ jobs:
         current_commit=$(git rev-parse HEAD)
         
         # Always process all VERSION files regardless of changes
-        applications_to_process=()
+        workloads_to_process=()
         
-        print_info "Scanning all application VERSION files..."
-        for version_file in application/*/VERSION; do
+        print_info "Scanning all workload VERSION files..."
+        for version_file in workload/*/VERSION; do
             if [ -f "$version_file" ]; then
-                application_name=$(basename $(dirname "$version_file"))
-                applications_to_process+=("$application_name")
-                print_info "Found VERSION file for application: $application_name"
+                workload_name=$(basename $(dirname "$version_file"))
+                workloads_to_process+=("$workload_name")
+                print_info "Found VERSION file for workload: $workload_name"
             fi
         done
         
-        if [ ${#applications_to_process[@]} -eq 0 ]; then
-            print_info "No VERSION files found in any applications. No tags to create."
+        if [ ${#workloads_to_process[@]} -eq 0 ]; then
+            print_info "No VERSION files found in any workloads. No tags to create."
             exit 0
         fi
         
-        print_info "Applications to process: ${applications_to_process[*]}"
+        print_info "Workloads to process: ${workloads_to_process[*]}"
         
-        # Create tags for each application based on current VERSION files
+        # Create tags for each workload based on current VERSION files
         tags_created=()
         tags_skipped=()
         
-        for application in "${applications_to_process[@]}"; do
-            version_file="application/$application/VERSION"
+        for workload in "${workloads_to_process[@]}"; do
+            version_file="workload/$workload/VERSION"
             
             if [ ! -f "$version_file" ]; then
-                print_warning "VERSION file not found for $application, skipping"
+                print_warning "VERSION file not found for $workload, skipping"
                 continue
             fi
             
@@ -126,9 +126,9 @@ jobs:
             fi
             
             # Create tag name (using best practice format)
-            tag_name="${application}/v${current_version}"
+            tag_name="${workload}/v${current_version}"
             
-            print_info "Processing $application version $current_version..."
+            print_info "Processing $workload version $current_version..."
             
             # Check if tag already exists
             if git tag -l | grep -q "^$tag_name$"; then
@@ -137,13 +137,13 @@ jobs:
                 continue
             fi
             
-            print_info "Creating tag for $application version $current_version..."
+            print_info "Creating tag for $workload version $current_version..."
             
-            # Get recent commits for this application to include in tag message
-            application_commit_messages=()
+            # Get recent commits for this workload to include in tag message
+            workload_commit_messages=()
             
-            # Get the last 5 commits that modified this application
-            recent_commits=$(git log --format="%H" --oneline -10 -- "application/$application/")
+            # Get the last 5 commits that modified this workload
+            recent_commits=$(git log --format="%H" --oneline -10 -- "workload/$workload/")
             
             while IFS= read -r commit; do
                 if [ -n "$commit" ]; then
@@ -152,11 +152,11 @@ jobs:
                     short_sha=$(git rev-parse --short "$commit_hash")
                     
                     # Skip auto-generated changelog commits
-                    if [[ ! $commit_msg =~ ^docs\($application\):.*Changelog\ for\ Version ]]; then
-                        application_commit_messages+=("- $commit_msg ($short_sha)")
+                    if [[ ! $commit_msg =~ ^docs\($workload\):.*Changelog\ for\ Version ]]; then
+                        workload_commit_messages+=("- $commit_msg ($short_sha)")
                         
                         # Limit to 5 commits for readability
-                        if [ ${#application_commit_messages[@]} -ge 5 ]; then
+                        if [ ${#workload_commit_messages[@]} -ge 5 ]; then
                             break
                         fi
                     fi
@@ -164,13 +164,13 @@ jobs:
             done <<< "$recent_commits"
             
             # Create tag message
-            if [ ${#application_commit_messages[@]} -gt 0 ]; then
-                tag_message="$application version $current_version"$'\n\n'"Recent changes:"
-                for msg in "${application_commit_messages[@]}"; do
+            if [ ${#workload_commit_messages[@]} -gt 0 ]; then
+                tag_message="$workload version $current_version"$'\n\n'"Recent changes:"
+                for msg in "${workload_commit_messages[@]}"; do
                     tag_message+=$'\n'"$msg"
                 done
             else
-                tag_message="$application version $current_version"$'\n\n'"Tagged from VERSION file"
+                tag_message="$workload version $current_version"$'\n\n'"Tagged from VERSION file"
             fi
             
             # Create the tag
@@ -214,7 +214,7 @@ jobs:
         
         echo "**Summary:** Created ${#tags_created[@]} tags, skipped ${#tags_skipped[@]} tags" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Tag Format:** \`{application}/v{version}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Tag Format:** \`{workload}/v{version}\`" >> $GITHUB_STEP_SUMMARY
         echo "**Behavior:** Always processes all VERSION files (skips existing tags)" >> $GITHUB_STEP_SUMMARY
         echo "**Trigger:** Automatic after changelog workflow completes on prod-v1" >> $GITHUB_STEP_SUMMARY
         

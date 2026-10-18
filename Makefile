@@ -61,7 +61,7 @@ start:
 	@make -C infrastructure/database/sql DATABASE_SQL="$(DATABASE_SQL)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" run-database-sql
 	@make -C infrastructure/cache CACHE="$(CACHE)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" run-cache
 	@make -C infrastructure/messaging MESSAGING="$(MESSAGING)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" run-messaging
-	@make -C application APPLICATION="$(APPLICATION)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" run-application
+	@make -C workload WORKLOAD="$(WORKLOAD)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" run-workload
 
 .PHONY: stop
 stop:
@@ -69,4 +69,4 @@ stop:
 	@make -C infrastructure/database/sql DATABASE_SQL="$(DATABASE_SQL)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" stop-database-sql
 	@make -C infrastructure/cache CACHE="$(CACHE)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" stop-cache
 	@make -C infrastructure/messaging MESSAGING="$(MESSAGING)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" stop-messaging
-	@make -C application APPLICATION="$(APPLICATION)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" stop-application
+	@make -C workload WORKLOAD="$(WORKLOAD)" SLUG="$(SLUG)" NAME="$(NAME)" ENV="$(ENV)" stop-workload

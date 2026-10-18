@@ -308,7 +308,7 @@ jobs:
             echo "💡 This prevents unnecessary releases when no VERSION files have changed"
             echo ""
             echo "**Next Steps:**"
-            echo "- Update VERSION files in application directories to create new releases"
+            echo "- Update VERSION files in workload directories to create new releases"
             echo "- Ensure the auto-create-tags workflow has new versions to process"
           else
             echo "🎉 ALL WORKFLOWS COMPLETED!"

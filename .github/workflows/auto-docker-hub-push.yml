@@ -51,11 +51,11 @@ jobs:
               # Extract individual tags from JSON array
               created_tags_array=$(echo "$created_tags_json" | jq -r '.[]' 2>/dev/null)
               
-              applications_with_new_tags=()
+              workloads_with_new_tags=()
               if [ -n "$created_tags_array" ]; then
                 while IFS= read -r tag; do
                   if [ -n "$tag" ] && [ "$tag" != "null" ]; then
-                    applications_with_new_tags+=("$tag")
+                    workloads_with_new_tags+=("$tag")
                     echo "  ✅ Found newly created tag: $tag"
                   fi
                 done <<< "$created_tags_array"
@@ -64,18 +64,18 @@ jobs:
               fi
             else
               echo "⚠️ Invalid JSON format in created-tags artifact"
-              applications_with_new_tags=()
+              workloads_with_new_tags=()
             fi
           else
             echo "⚠️ Could not find created-tags artifact"
-            applications_with_new_tags=()
+            workloads_with_new_tags=()
           fi
           
           echo ""
-          echo "📊 Final decision: Found ${#applications_with_new_tags[@]} applications to build"
+          echo "📊 Final decision: Found ${#workloads_with_new_tags[@]} workloads to build"
           
           # Use the tags found from auto-create-tags output or fallback
-          if [ ${#applications_with_new_tags[@]} -eq 0 ]; then
+          if [ ${#workloads_with_new_tags[@]} -eq 0 ]; then
             echo "ℹ️ No newly created tags found"
             echo "🛡️ This means:"
             echo "   - Auto-create-tags workflow didn't create any new tags"
@@ -85,19 +85,19 @@ jobs:
             echo "🚫 No Docker builds will be triggered"
             created_tags_json="[]"
           else
-            echo "✅ Found ${#applications_with_new_tags[@]} tags to build:"
-            printf '   - %s\n' "${applications_with_new_tags[@]}"
+            echo "✅ Found ${#workloads_with_new_tags[@]} tags to build:"
+            printf '   - %s\n' "${workloads_with_new_tags[@]}"
             
             # Convert to JSON array
             created_tags_json="["
-            for i in "${!applications_with_new_tags[@]}"; do
+            for i in "${!workloads_with_new_tags[@]}"; do
               if [ $i -gt 0 ]; then
                 created_tags_json="${created_tags_json},"
               fi
-              created_tags_json="${created_tags_json}\"${applications_with_new_tags[$i]}\""
+              created_tags_json="${created_tags_json}\"${workloads_with_new_tags[$i]}\""
             done
             created_tags_json="${created_tags_json}]"
-            echo "🚀 Docker builds will be triggered for these applications"
+            echo "🚀 Docker builds will be triggered for these workloads"
           fi
           
           echo ""
@@ -133,17 +133,17 @@ jobs:
             if [ -n "$tag" ] && [ "$tag" != "null" ]; then
               echo "Processing tag: $tag"
               
-              # Extract application name and version
+              # Extract workload name and version
               if [[ $tag == *"/"* ]]; then
-                application_name=$(echo "$tag" | cut -d'/' -f1)
+                workload_name=$(echo "$tag" | cut -d'/' -f1)
                 version=$(echo "$tag" | cut -d'/' -f2)  # Keep 'v' prefix intact
                 
-                # Validate application directory exists
-                if [ -d "application/$application_name" ]; then
-                  tag_matrix+=("{\"tag\":\"$tag\",\"application\":\"$application_name\",\"version\":\"$version\"}")
-                  echo "✅ Added $application_name ($version) to build matrix"
+                # Validate workload directory exists
+                if [ -d "workload/$workload_name" ]; then
+                  tag_matrix+=("{\"tag\":\"$tag\",\"workload\":\"$workload_name\",\"version\":\"$version\"}")
+                  echo "✅ Added $workload_name ($version) to build matrix"
                 else
-                  echo "⚠️ Skipping $application_name - directory not found"
+                  echo "⚠️ Skipping $workload_name - directory not found"
                 fi
               else
                 echo "⚠️ Skipping tag $tag - invalid format (expected: app/version)"
@@ -153,7 +153,7 @@ jobs:
           
           # Convert array to JSON
           if [ ${#tag_matrix[@]} -eq 0 ]; then
-            echo "❌ No valid applications found to build"
+            echo "❌ No valid workloads found to build"
             echo "tags=[]" >> $GITHUB_OUTPUT
             echo "no_tags_created=true" >> $GITHUB_OUTPUT
             exit 0
@@ -163,9 +163,9 @@ jobs:
           echo "tags=$tags_json" >> $GITHUB_OUTPUT
           echo "no_tags_created=false" >> $GITHUB_OUTPUT
           echo "Matrix JSON: $tags_json"
-          echo "Found ${#tag_matrix[@]} applications to build"
+          echo "Found ${#tag_matrix[@]} workloads to build"
 
-  # Job to build and push all applications in parallel
+  # Job to build and push all workloads in parallel
   # Job to handle no tags created scenario
   no-tags-handler:
     name: Handle No Tags Created
@@ -182,13 +182,13 @@ jobs:
           echo "**Reason:** Either no VERSION files changed or all tags already exist" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Update VERSION files in application directories to create new tags" >> $GITHUB_STEP_SUMMARY
+          echo "- Update VERSION files in workload directories to create new tags" >> $GITHUB_STEP_SUMMARY
           echo "- Ensure changelog workflow completed successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🚫 **No release will be created** - this prevents unnecessary releases when no changes are made." >> $GITHUB_STEP_SUMMARY
 
   build-and-push:
-    name: Build ${{ matrix.application }}
+    name: Build ${{ matrix.workload }}
     runs-on: ubuntu-latest
     needs: find-tags
     if: ${{ needs.find-tags.outputs.tags != '[]' && needs.find-tags.outputs.tags != '' && needs.find-tags.outputs.no_tags_created != 'true' }}
@@ -214,29 +214,29 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}-${{ matrix.application }}
+          images: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}-${{ matrix.workload }}
           tags: |
             type=raw,value=${{ matrix.version }}
             type=raw,value=latest
 
-      - name: Read application version
+      - name: Read workload version
         id: version
         run: |
-          application_version=""
-          if [ -f "application/${{ matrix.application }}/VERSION" ]; then
-            application_version=$(cat application/${{ matrix.application }}/VERSION)
-            echo "Application version from VERSION file: $application_version"
+          workload_version=""
+          if [ -f "workload/${{ matrix.workload }}/VERSION" ]; then
+            workload_version=$(cat workload/${{ matrix.workload }}/VERSION)
+            echo "Workload version from VERSION file: $workload_version"
           else
-            application_version="${{ matrix.version }}"
-            echo "Using extracted version: $application_version"
+            workload_version="${{ matrix.version }}"
+            echo "Using extracted version: $workload_version"
           fi
-          echo "version=$application_version" >> $GITHUB_OUTPUT
+          echo "version=$workload_version" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./application/${{ matrix.application }}
-          file: ./application/${{ matrix.application }}/Dockerfile
+          context: ./workload/${{ matrix.workload }}
+          file: ./workload/${{ matrix.workload }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -252,7 +252,7 @@ jobs:
         run: |
           echo "## Docker Hub Push Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Application:** ${{ matrix.application }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Workload:** ${{ matrix.workload }}" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** Docker Hub" >> $GITHUB_STEP_SUMMARY
           echo "**Trigger:** Workflow Run" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
