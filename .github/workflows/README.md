@@ -23,6 +23,8 @@ before reusing them in another project.
   `auto-create-releases.yml` after all registry jobs succeed.
 - `auto-push.yml` is a reusable publishing workflow that builds each tagged
   workload image and publishes it to either Docker Hub or GHCR.
+- `manual-push.yml` is a manually triggered publishing workflow that accepts a
+  registry and one workload tag.
 - `auto-create-releases.yml` is a reusable workflow that creates the GitHub
   release and records the resulting versions and image references.
 
@@ -100,6 +102,17 @@ It expects registry credentials and repository permissions to be configured in
 GitHub. Docker Hub uses `DOCKER_USERNAME` and `DOCKER_PASSWORD`; GHCR uses
 the workflow's `GITHUB_TOKEN`. Remove these workflows if the project does not
 publish containers, or replace their build steps for another packaging system.
+
+To republish one existing workload tag manually, open **Actions → Manual Push
+→ Run workflow**, select `docker-hub` or `ghcr`, and enter a tag such as:
+
+```text
+api-gateway/v1.0.3
+```
+
+Manual publishing builds the selected workload from the workflow's current
+revision and publishes both the version tag and `latest`. It does not create a
+Git tag, changelog entry, or GitHub release.
 
 ## ♻️ Reusing the Workflows
 

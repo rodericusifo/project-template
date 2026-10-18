@@ -1,0 +1,110 @@
+# Copyright 2025 Rodericus Ifo Krista
+# SPDX-License-Identifier: MIT
+
+name: Manual Push
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: Registry to publish to
+        required: true
+        type: choice
+        options:
+          - docker-hub
+          - ghcr
+      tag:
+        description: Workload tag, for example api-gateway/v1.0.3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+jobs:
+  push:
+    name: Push ${{ inputs.tag }} to ${{ inputs.registry }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Validate inputs
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+
+        case "$REGISTRY" in
+          docker-hub|ghcr) ;;
+          *)
+            echo "::error::Unsupported registry: $REGISTRY"
+            exit 1
+            ;;
+        esac
+
+        if [[ "$TAG" != */v[0-9]*.[0-9]*.[0-9]* ]]; then
+          echo "::error::Tag must have the form workload/v<major>.<minor>.<patch>"
+          exit 1
+        fi
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: inputs.registry == 'docker-hub'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Log in to GHCR
+      if: inputs.registry == 'ghcr'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push workload image
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        TAG: ${{ inputs.tag }}
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        REPOSITORY: ${{ github.event.repository.name }}
+        OWNER: ${{ github.repository_owner }}
+      run: |
+        set -euo pipefail
+
+        workload="${TAG%%/*}"
+        version="${TAG#*/}"
+        version="${version#v}"
+        if [ -z "$workload" ] || [ -z "$version" ] || [ ! -f "workload/$workload/Dockerfile" ]; then
+          echo "::error::Invalid tag or missing Dockerfile: $TAG"
+          exit 1
+        fi
+
+        case "$REGISTRY" in
+          docker-hub)
+            image="$DOCKER_USERNAME/$REPOSITORY-$workload"
+            ;;
+          ghcr)
+            image="ghcr.io/$OWNER/$REPOSITORY-$workload"
+            ;;
+        esac
+
+        docker buildx build \
+          --file "workload/$workload/Dockerfile" \
+          --build-arg "NAME=$REPOSITORY-$workload" \
+          --build-arg "VERSION=$version" \
+          --build-arg "MODE=development" \
+          --tag "$image:$version" \
+          --tag "$image:latest" \
+          --push \
+          "workload/$workload"
