@@ -7,20 +7,24 @@ import (
 	"github.com/imdario/mergo"
 )
 
-func MergeStructs[T comparable](withOverride bool, structs ...T) T {
+func MergeStructs[T comparable](withOverride bool, structs ...T) (T, error) {
 	dst := new(T)
 
 	if !withOverride {
 		for _, s := range structs {
-			mergo.Merge(dst, s)
+			if err := mergo.Merge(dst, s); err != nil {
+				return *dst, err
+			}
 		}
 
-		return *dst
+		return *dst, nil
 	}
 
 	for _, s := range structs {
-		mergo.Merge(dst, s, mergo.WithOverride)
+		if err := mergo.Merge(dst, s, mergo.WithOverride); err != nil {
+			return *dst, err
+		}
 	}
 
-	return *dst
+	return *dst, nil
 }

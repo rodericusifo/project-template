@@ -34,8 +34,7 @@ func APIUser(userClientHandler external_client_authservice_http_grpc_handler_use
 		}
 
 		roleStatus := pb_user.RoleStatus_name[int32(userRes.GetData().GetRole().GetStatus())]
-		reqUser := new(types.RequestUser)
-		reqUser = &types.RequestUser{
+		reqUser := &types.RequestUser{
 			ID:    userRes.GetData().GetID(),
 			XID:   user.XID,
 			Name:  userRes.GetData().GetName(),
