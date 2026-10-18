@@ -14,7 +14,9 @@ type Validator struct {
 func InitValidator() *Validator {
 	v := validator.New()
 
-	v.RegisterValidation("isbn", isbn)
+	if err := v.RegisterValidation("isbn", isbn); err != nil {
+		panic(err)
+	}
 
 	return &Validator{Validator: v}
 }
