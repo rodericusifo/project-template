@@ -1,0 +1,40 @@
+# Copyright 2025 Rodericus Ifo Krista
+# SPDX-License-Identifier: MIT
+
+name: Push and Release Coordinator
+
+on:
+  workflow_run:
+    workflows: ["Auto Create Tags"]
+    types:
+      - completed
+    branches:
+      - prod-v1
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  push-workflows:
+    name: Push to ${{ matrix.registry }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        registry:
+          - docker-hub
+          - ghcr
+    uses: ./.github/workflows/auto-push.yml
+    with:
+      registry: ${{ matrix.registry }}
+      source_run_id: ${{ github.event.workflow_run.id }}
+    secrets: inherit
+
+  create-release:
+    name: Create Release
+    needs: push-workflows
+    if: ${{ always() && needs.push-workflows.result == 'success' }}
+    uses: ./.github/workflows/auto-create-releases.yml
+    secrets: inherit

@@ -1,0 +1,137 @@
+# Copyright 2025 Rodericus Ifo Krista
+# SPDX-License-Identifier: MIT
+
+name: Auto Push
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: Registry to publish to
+        required: true
+        type: string
+      source_run_id:
+        description: Run ID of Auto Create Tags
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+jobs:
+  find-tags:
+    name: Find Tags
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.extract.outputs.tags }}
+      no-tags: ${{ steps.extract.outputs.no-tags }}
+
+    steps:
+    - name: Validate registry
+      env:
+        REGISTRY: ${{ inputs.registry }}
+      run: |
+        case "$REGISTRY" in
+          docker-hub|ghcr) ;;
+          *)
+            echo "::error::Unsupported registry: $REGISTRY"
+            exit 1
+            ;;
+        esac
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download created tags
+      uses: actions/download-artifact@v4
+      with:
+        name: created-tags
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ inputs.source_run_id }}
+
+    - name: Extract tags
+      id: extract
+      run: |
+        set -euo pipefail
+
+        if [ ! -f created-tags.json ]; then
+          echo "::error::created-tags.json was not found"
+          exit 1
+        fi
+
+        tags=$(jq -c 'if type == "array" then . else error("tags must be an array") end' created-tags.json)
+        echo "tags=$tags" >> "$GITHUB_OUTPUT"
+        if [ "$tags" = "[]" ]; then
+          echo "no-tags=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "no-tags=false" >> "$GITHUB_OUTPUT"
+        fi
+
+  build-and-push:
+    name: Push ${{ matrix.tag }} to ${{ inputs.registry }}
+    runs-on: ubuntu-latest
+    needs: find-tags
+    if: needs.find-tags.outputs.no-tags == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJSON(needs.find-tags.outputs.tags) }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: inputs.registry == 'docker-hub'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Log in to GHCR
+      if: inputs.registry == 'ghcr'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push workload image
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        TAG: ${{ matrix.tag }}
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        REPOSITORY: ${{ github.event.repository.name }}
+        OWNER: ${{ github.repository_owner }}
+      run: |
+        set -euo pipefail
+
+        workload="${TAG%%/*}"
+        version="${TAG#*/}"
+        if [ -z "$workload" ] || [ -z "$version" ] || [ ! -f "workload/$workload/Dockerfile" ]; then
+          echo "::error::Invalid tag or missing Dockerfile: $TAG"
+          exit 1
+        fi
+
+        case "$REGISTRY" in
+          docker-hub)
+            image="$DOCKER_USERNAME/$REPOSITORY-$workload"
+            ;;
+          ghcr)
+            image="ghcr.io/$OWNER/$REPOSITORY-$workload"
+            ;;
+        esac
+
+        docker buildx build \
+          --file "workload/$workload/Dockerfile" \
+          --tag "$image:$version" \
+          --tag "$image:latest" \
+          --push \
+          "workload/$workload"

@@ -4,8 +4,7 @@
 name: Auto Create Releases
 
 on:
-  repository_dispatch:
-    types: [docker-builds-completed]
+  workflow_call:
 
 permissions:
   contents: write  # Required to create tags and releases

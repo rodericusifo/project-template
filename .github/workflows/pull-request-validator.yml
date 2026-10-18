@@ -12,6 +12,22 @@ on:
       - synchronize
       - reopened
 
+env:
+  LINTING_WORKFLOWS: >-
+    [
+      {
+        "language":"golang",
+        "marker":"go.mod"
+      }
+    ]
+  UNIT_TESTING_WORKFLOWS: >-
+    [
+      {
+        "language":"golang",
+        "marker":"go.mod"
+      }
+    ]
+
 jobs:
   check-workload-changes:
     name: Check Workload Changes
@@ -19,42 +35,47 @@ jobs:
     outputs:
       has-workload-changes: ${{ steps.check-changes.outputs.has-workload-changes }}
       modified-workloads: ${{ steps.check-changes.outputs.modified-workloads }}
-    
+      lint-workflows: ${{ steps.check-changes.outputs.lint-workflows }}
+      unit-testing-workflows: ${{ steps.check-changes.outputs.unit-testing-workflows }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    
+
     - name: Fetch base branch
       run: |
         git fetch --no-tags --prune origin prod-v1:prod-v1 || true
-    
+
     - name: Check workload changes
       id: check-changes
       run: |
         #!/bin/bash
         set -e
-        
+
+        echo "lint-workflows=$(jq -c . <<< "$LINTING_WORKFLOWS")" >> "$GITHUB_OUTPUT"
+        echo "unit-testing-workflows=$(jq -c . <<< "$UNIT_TESTING_WORKFLOWS")" >> "$GITHUB_OUTPUT"
+
         # Colors for output
         RED='\033[0;31m'
         GREEN='\033[0;32m'
         YELLOW='\033[1;33m'
         BLUE='\033[0;34m'
         NC='\033[0m'
-        
+
         print_error() {
             echo -e "${RED}ERROR: $1${NC}" >&2
         }
-        
+
         print_success() {
             echo -e "${GREEN}SUCCESS: $1${NC}"
         }
-        
+
         print_warning() {
             echo -e "${YELLOW}WARNING: $1${NC}"
         }
-        
+
         print_info() {
             echo -e "${BLUE}INFO: $1${NC}"
         }
@@ -75,28 +96,28 @@ jobs:
         }
 
         print_info "Checking for workload changes..."
-        
+
         # Get commits in this PR
         commits_in_pr=$(git rev-list prod-v1..HEAD)
-        
+
         if [ -z "$commits_in_pr" ]; then
             print_info "No new commits in PR."
             echo "has-workload-changes=false" >> $GITHUB_OUTPUT
             exit 0
         fi
-        
+
         # Find modified workloads (excluding certain files)
         workloads=()
-        
+
         while IFS= read -r commit; do
             files_changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
             while IFS= read -r file; do
                 if [[ $file == workload/* ]]; then
                     workload_name=$(echo $file | cut -d'/' -f2)
-                    
+
                     # Extract the file name from the path
                     filename=$(basename "$file")
-                    
+
                     # Skip files that shouldn't trigger changelog generation
                     if [[ "$filename" == "CHANGELOG.md" ]] || \
                        [[ "$filename" == "Makefile" ]] || \
@@ -106,24 +127,24 @@ jobs:
                         print_info "Skipping file (excluded from workload change detection): $file"
                         continue
                     fi
-                    
+
                     if [[ ! " ${workloads[@]} " =~ " ${workload_name} " ]]; then
                         workloads+=("$workload_name")
                     fi
                 fi
             done <<< "$files_changed"
         done <<< "$commits_in_pr"
-        
+
         if [ ${#workloads[@]} -eq 0 ]; then
             print_info "No workloads modified."
             echo "has-workload-changes=false" >> $GITHUB_OUTPUT
             exit 0
         fi
-        
+
         print_info "Workloads with changes: ${workloads[*]}"
         echo "has-workload-changes=true" >> $GITHUB_OUTPUT
         echo "modified-workloads=$(IFS=,; echo "${workloads[*]}")" >> $GITHUB_OUTPUT
-        
+
         # Create GitHub Actions summary
         echo "## 📋 Workload Changes Detected" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
@@ -131,75 +152,75 @@ jobs:
         echo "**Total workloads:** ${#workloads[@]}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "These workloads will be validated for proper version updates." >> $GITHUB_STEP_SUMMARY
-        
+
         print_success "Found ${#workloads[@]} workloads with changes"
 
   validate-stack-mk:
     name: Validate stack.mk Workloads List
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
-    
+
     - name: Validate workloads in stack.mk
       run: |
         #!/bin/bash
         set -e
-        
+
         # Colors for output
         RED='\033[0;31m'
         GREEN='\033[0;32m'
         YELLOW='\033[1;33m'
         BLUE='\033[0;34m'
         NC='\033[0m'
-        
+
         print_error() {
             echo -e "${RED}ERROR: $1${NC}" >&2
         }
-        
+
         print_success() {
             echo -e "${GREEN}SUCCESS: $1${NC}"
         }
-        
+
         print_warning() {
             echo -e "${YELLOW}WARNING: $1${NC}"
         }
-        
+
         print_info() {
             echo -e "${BLUE}INFO: $1${NC}"
         }
-        
+
         print_info "Validating that all workloads are listed in stack.mk..."
-        
+
         # Check if stack.mk exists
         if [ ! -f "stack.mk" ]; then
             print_error "stack.mk file not found in repository root"
             exit 1
         fi
-        
+
         # Extract workloads from stack.mk
         if ! grep -q "^WORKLOAD :=" stack.mk; then
             print_error "WORKLOAD variable not found in stack.mk"
             exit 1
         fi
-        
+
         stack_mk_workloads=$(grep "^WORKLOAD :=" stack.mk | sed 's/WORKLOAD := //' | tr ' ' '\n' | sort)
-        
+
         if [ -z "$stack_mk_workloads" ]; then
             print_error "No workloads found in stack.mk WORKLOAD variable"
             exit 1
         fi
-        
+
         print_info "Workloads listed in stack.mk:"
         echo "$stack_mk_workloads" | while read app; do
             if [ -n "$app" ]; then
                 print_info "  - $app"
             fi
         done
-        
+
         # Get actual workloads from filesystem (excluding non-workload directories)
         filesystem_workloads=""
         for workload_dir in workload/*/; do
@@ -220,42 +241,42 @@ jobs:
                 fi
             fi
         done
-        
+
         if [ -z "$filesystem_workloads" ]; then
             print_warning "No workloads found in workload/ directory"
             exit 0
         fi
-        
+
         filesystem_workloads=$(echo "$filesystem_workloads" | sort)
-        
+
         print_info "Workloads found in filesystem:"
         echo "$filesystem_workloads" | while read app; do
             if [ -n "$app" ]; then
                 print_info "  - $app"
             fi
         done
-        
+
         # Compare the two lists
         missing_in_stack_mk=()
         extra_in_stack_mk=()
-        
+
         # Check for workloads in filesystem but not in stack.mk
         while IFS= read -r app; do
             if [ -n "$app" ] && ! echo "$stack_mk_workloads" | grep -q "^$app$"; then
                 missing_in_stack_mk+=("$app")
             fi
         done <<< "$filesystem_workloads"
-        
+
         # Check for workloads in stack.mk but not in filesystem
         while IFS= read -r app; do
             if [ -n "$app" ] && ! echo "$filesystem_workloads" | grep -q "^$app$"; then
                 extra_in_stack_mk+=("$app")
             fi
         done <<< "$stack_mk_workloads"
-        
+
         # Report results
         validation_failed=false
-        
+
         if [ ${#missing_in_stack_mk[@]} -gt 0 ]; then
             print_error "Workloads found in filesystem but missing from stack.mk:"
             for app in "${missing_in_stack_mk[@]}"; do
@@ -263,7 +284,7 @@ jobs:
             done
             validation_failed=true
         fi
-        
+
         if [ ${#extra_in_stack_mk[@]} -gt 0 ]; then
             print_error "Workloads listed in stack.mk but not found in filesystem:"
             for app in "${extra_in_stack_mk[@]}"; do
@@ -271,23 +292,23 @@ jobs:
             done
             validation_failed=true
         fi
-        
+
         # Create GitHub Actions summary
         echo "## 📋 stack.mk Workloads Validation" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        
+
         if [ "$validation_failed" = true ]; then
             echo "### ❌ Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            
+
             if [ ${#missing_in_stack_mk[@]} -gt 0 ]; then
                 echo "**Missing from stack.mk:** ${missing_in_stack_mk[*]}" >> $GITHUB_STEP_SUMMARY
             fi
-            
+
             if [ ${#extra_in_stack_mk[@]} -gt 0 ]; then
                 echo "**Extra in stack.mk:** ${extra_in_stack_mk[*]}" >> $GITHUB_STEP_SUMMARY
             fi
-            
+
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Rule:** All workloads in the \`workload/\` directory must be listed in the \`WORKLOAD\` variable in \`stack.mk\`." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -307,7 +328,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Workloads verified:** $(echo "$filesystem_workloads" | wc -l)" >> $GITHUB_STEP_SUMMARY
         fi
-        
+
         if [ "$validation_failed" = true ]; then
             print_error ""
             print_error "stack.mk WORKLOAD VALIDATION FAILED"
@@ -328,42 +349,42 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-workload-changes
     if: needs.check-workload-changes.outputs.has-workload-changes == 'true'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Fetch full history for version comparison
-    
+
     - name: Fetch base branch
       run: |
         git fetch origin prod-v1:prod-v1
-    
+
     - name: Run Version Validation
       run: |
         #!/bin/bash
         set -e
-        
+
         # Colors for output
         RED='\033[0;31m'
         GREEN='\033[0;32m'
         YELLOW='\033[1;33m'
         BLUE='\033[0;34m'
         NC='\033[0m' # No Color
-        
+
         # Function to print colored output
         print_error() {
             echo -e "${RED}ERROR: $1${NC}" >&2
         }
-        
+
         print_success() {
             echo -e "${GREEN}SUCCESS: $1${NC}"
         }
-        
+
         print_warning() {
             echo -e "${YELLOW}WARNING: $1${NC}"
         }
-        
+
         print_info() {
             echo -e "${BLUE}INFO: $1${NC}"
         }
@@ -388,12 +409,12 @@ jobs:
             local version=$1
             echo $version | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)/\1 \2 \3/'
         }
-        
+
         # Function to compare versions
         version_greater() {
             local v1=($1)
             local v2=($2)
-            
+
             for i in {0..2}; do
                 if [ ${v1[$i]} -gt ${v2[$i]} ]; then
                     return 0
@@ -403,25 +424,25 @@ jobs:
             done
             return 1
         }
-        
+
         # Function to validate version increment
         validate_version_increment() {
             local old_version=$1
             local new_version=$2
-            
+
             local old_parts=($(parse_version $old_version))
             local new_parts=($(parse_version $new_version))
-            
+
             local major_diff=$((new_parts[0] - old_parts[0]))
             local minor_diff=$((new_parts[1] - old_parts[1]))
             local patch_diff=$((new_parts[2] - old_parts[2]))
-            
+
             # Check if version is higher
             if ! version_greater "${new_parts[*]}" "${old_parts[*]}"; then
                 print_error "New version $new_version must be higher than old version $old_version"
                 return 1
             fi
-            
+
             # Major version updates are not allowed, except from 0 to 1
             if [ $major_diff -ne 0 ]; then
                 # Allow major version update from 0.x.x to 1.x.x (pre-release to stable)
@@ -439,52 +460,52 @@ jobs:
                     return 1
                 fi
             fi
-            
+
             # Minor version diff cannot be negative values, decimal values, more than 1
             if [ $minor_diff -lt 0 ]; then
                 print_error "Minor version diff cannot be negative values"
                 return 1
             fi
-            
+
             if [ $minor_diff -gt 1 ] || [ $patch_diff -gt 1 ]; then
                 print_error "Minor version diff and patch version diff cannot be more than 1"
                 return 1
             fi
-            
+
             # When minor version updated, the patch version should be reset to 0
             if [ $minor_diff -gt 0 ] && [ ${new_parts[2]} -ne 0 ]; then
                 print_error "When minor version updated, the patch version should be reset to 0"
                 return 1
             fi
-            
+
             return 0
         }
-        
+
         print_info "Running version validation for PR to prod-v1..."
-        
+
         # Get list of commits in this PR
         commits_in_pr=$(git rev-list prod-v1..HEAD)
-        
+
         if [ -z "$commits_in_pr" ]; then
             print_info "No new commits in PR."
             exit 0
         fi
-        
+
         print_info "Found commits in PR: $(echo "$commits_in_pr" | wc -l) commits"
-        
+
         # Check for workload changes in the commits in PR
         workloads=()
-        
+
         # Collect all workloads that have changes (excluding certain files)
         while IFS= read -r commit; do
             files_changed=$(git diff-tree --no-commit-id --name-only -r "$commit")
             while IFS= read -r file; do
                 if [[ $file == workload/* ]]; then
                     workload_name=$(echo $file | cut -d'/' -f2)
-                    
+
                     # Extract the file name from the path
                     filename=$(basename "$file")
-                    
+
                     # Skip files that shouldn't trigger validation
                     if [[ "$filename" == "CHANGELOG.md" ]] || \
                        [[ "$filename" == "Makefile" ]] || \
@@ -494,33 +515,33 @@ jobs:
                         print_info "Skipping file (excluded from validation trigger): $file"
                         continue
                     fi
-                    
+
                     if [[ ! " ${workloads[@]} " =~ " ${workload_name} " ]]; then
                         workloads+=("$workload_name")
                     fi
                 fi
             done <<< "$files_changed"
         done <<< "$commits_in_pr"
-        
+
         if [ ${#workloads[@]} -eq 0 ]; then
             print_info "No workloads modified. Skipping validation."
             exit 0
         fi
-        
+
         print_info "Workloads with changes: ${workloads[*]}"
-        
+
         # Check for version-only updates without workload modifications
         print_info "=== VERSION-ONLY UPDATE PREVENTION ==="
         version_only_workloads=()
-        
+
         # Get all VERSION files that were modified in this PR
         modified_version_files=$(git diff --name-only prod-v1..HEAD | grep "^workload/.*/VERSION$" || true)
-        
+
         if [ -n "$modified_version_files" ]; then
             while IFS= read -r version_file; do
                 if [ -n "$version_file" ]; then
                     workload_name=$(echo "$version_file" | cut -d'/' -f2)
-                    
+
                     # Check if only VERSION file was modified for this workload (no other significant workload files)
                     workload_files_modified=$(git diff --name-only prod-v1..HEAD | grep "^workload/$workload_name/" | grep -v "^workload/$workload_name/VERSION$" | while IFS= read -r file; do
                         filename=$(basename "$file")
@@ -533,7 +554,7 @@ jobs:
                             echo "$file"
                         fi
                     done)
-                    
+
                     if [ -z "$workload_files_modified" ]; then
                         version_only_workloads+=("$workload_name")
                         print_error "❌ $workload_name: Only VERSION file was modified, no actual workload changes detected"
@@ -543,7 +564,7 @@ jobs:
                 fi
             done <<< "$modified_version_files"
         fi
-        
+
         # If there are version-only updates, fail the validation
         if [ ${#version_only_workloads[@]} -gt 0 ]; then
             print_error ""
@@ -561,7 +582,7 @@ jobs:
             print_error "To fix this issue:"
             print_error "1. Either make actual changes to the workload code, or"
             print_error "2. Revert the VERSION file changes if no workload changes are needed"
-            
+
             # Create summary for version-only updates
             echo "## ❌ Version-Only Updates Detected" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -575,26 +596,26 @@ jobs:
             echo "• Maintains clear release tracking" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**To fix:** Either add actual workload changes or revert VERSION file changes." >> $GITHUB_STEP_SUMMARY
-            
+
             exit 1
         fi
-        
+
         # Validate all changed workloads have updated versions from base branch
         print_info "=== VERSION UPDATE VALIDATION ==="
         version_validation_failed=false
         version_validation_details=""
-        
+
         for workload in "${workloads[@]}"; do
             version_file="workload/$workload/VERSION"
-            
+
             if [ ! -f "$version_file" ]; then
                 print_warning "VERSION file not found for workload $workload. Skipping version validation."
                 continue
             fi
-            
+
             current_version=$(cat "$version_file" | tr -d '\n\r' | tr -d ' ')
             base_version=""
-            
+
             # Get version from base branch (prod-v1)
             if git show prod-v1:"$version_file" &>/dev/null; then
                 base_version=$(git show prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
@@ -602,9 +623,9 @@ jobs:
                 print_warning "VERSION file for $workload not found in base branch (prod-v1). Using 0.0.0 as base."
                 base_version="0.0.0"
             fi
-            
+
             print_info "Workload: $workload | Base: $base_version | Current: $current_version"
-            
+
             # Check if version was updated from base branch
             if [ "$current_version" = "$base_version" ]; then
                 print_error "VERSION file for workload '$workload' was not updated from base branch"
@@ -612,7 +633,7 @@ jobs:
                 print_error "  Current version: $current_version"
                 print_error "  Workload has changes but version remains the same!"
                 version_validation_failed=true
-                
+
                 version_validation_details+="❌ **$workload**: Version not updated from base branch\\n"
                 version_validation_details+="   - Base: \`$base_version\` → Current: \`$current_version\`\\n"
                 version_validation_details+="   - Suggested patch: \`$(echo $current_version | awk -F. '{print $1"."$2"."($3+1)}')\`\\n"
@@ -625,7 +646,7 @@ jobs:
                     version_validation_details+="❌ **$workload**: Invalid version format \`$current_version\`\\n"
                     continue
                 fi
-                
+
                 # Validate version increment
                 if ! validate_version_increment "$base_version" "$current_version"; then
                     version_validation_failed=true
@@ -636,14 +657,14 @@ jobs:
                 fi
             fi
         done
-        
+
         # Create GitHub Actions summary
         echo "## 🔍 Version Validation Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Workloads analyzed:** ${workloads[*]}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo -e "$version_validation_details" >> $GITHUB_STEP_SUMMARY
-        
+
         # If any workload failed version validation, exit with error
         if [ "$version_validation_failed" = true ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -660,7 +681,7 @@ jobs:
             echo "• Proper version tracking from base branch" >> $GITHUB_STEP_SUMMARY
             echo "• Clear release management" >> $GITHUB_STEP_SUMMARY
             echo "• Consistent versioning across deployments" >> $GITHUB_STEP_SUMMARY
-            
+
             print_error ""
             print_error "VERSION UPDATE VALIDATION FAILED"
             exit 1
@@ -669,6 +690,24 @@ jobs:
             echo "### ✅ All Validations Passed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "All modified workloads have properly updated VERSION files following semantic versioning rules." >> $GITHUB_STEP_SUMMARY
-            
+
             print_success "Version validation passed: All workloads have updated versions from base branch"
         fi
+
+  lint:
+    name: Run Lint
+    needs: check-workload-changes
+    if: needs.check-workload-changes.outputs.has-workload-changes == 'true'
+    uses: ./.github/workflows/auto-lint.yml
+    with:
+      workloads: ${{ needs.check-workload-changes.outputs.modified-workloads }}
+      workflow-configs: ${{ needs.check-workload-changes.outputs.lint-workflows }}
+
+  unit-tests:
+    name: Run Unit Tests
+    needs: check-workload-changes
+    if: needs.check-workload-changes.outputs.has-workload-changes == 'true'
+    uses: ./.github/workflows/auto-unit-tests.yml
+    with:
+      workloads: ${{ needs.check-workload-changes.outputs.modified-workloads }}
+      workflow-configs: ${{ needs.check-workload-changes.outputs.unit-testing-workflows }}

@@ -1,0 +1,60 @@
+# Copyright 2025 Rodericus Ifo Krista
+# SPDX-License-Identifier: MIT
+
+name: Auto Unit Tests
+
+on:
+  workflow_call:
+    inputs:
+      workloads:
+        description: Comma-separated workload directories to test
+        required: true
+        type: string
+      workflow-configs:
+        description: JSON array of language and marker configuration objects
+        required: true
+        type: string
+
+jobs:
+  golang:
+    name: Test Go Workloads
+    if: contains(inputs.workflow-configs, '"language":"golang"')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: false
+
+    - name: Run Go unit tests
+      env:
+        WORKLOADS: ${{ inputs.workloads }}
+        WORKFLOW_CONFIGS: ${{ inputs.workflow-configs }}
+      run: |
+        set -euo pipefail
+
+        marker=$(jq -r '.[] | select(.language == "golang") | .marker' <<< "$WORKFLOW_CONFIGS")
+        if [ -z "$marker" ] || [ "$marker" = "null" ]; then
+          echo "::error::No marker configured for the golang unit-test job"
+          exit 1
+        fi
+
+        IFS=',' read -ra workloads <<< "$WORKLOADS"
+        matched=false
+        for workload in "${workloads[@]}"; do
+          if [ ! -f "workload/$workload/$marker" ]; then
+            continue
+          fi
+          matched=true
+          echo "Testing workload/$workload"
+          (cd "workload/$workload" && go test ./...)
+        done
+
+        if [ "$matched" = false ]; then
+          echo "No Go workloads matched marker: $marker"
+        fi
