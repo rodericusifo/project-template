@@ -20,6 +20,9 @@ permissions:
   contents: write  # Required to create and push tags
   actions: read    # Required to access workflow information
 
+env:
+  TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
+
 jobs:
   create-tags:
     name: Create Version Tags
@@ -216,7 +219,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Tag Format:** \`{workload}/v{version}\`" >> $GITHUB_STEP_SUMMARY
         echo "**Behavior:** Always processes all VERSION files (skips existing tags)" >> $GITHUB_STEP_SUMMARY
-        echo "**Trigger:** Automatic after changelog workflow completes on prod-v1" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger:** Automatic after changelog workflow completes on $TARGET_BRANCH" >> $GITHUB_STEP_SUMMARY
         
         # Output created tags for downstream workflows
         if [ ${#tags_created[@]} -gt 0 ]; then

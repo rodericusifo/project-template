@@ -19,6 +19,9 @@ permissions:
   contents: write  # Required to commit changelog changes
   actions: read    # Required to access workflow information
 
+env:
+  TARGET_BRANCH: ${{ github.ref_name }}
+
 jobs:
   create-or-update-changelogs:
     name: Create or Update Changelogs
@@ -189,7 +192,7 @@ jobs:
         
         print_info "Workloads with changes: ${workloads[*]}"
         
-        # When merging to prod-v1, always process all workloads with changes
+        # When merging to the target branch, always process all workloads with changes
         # The version should have been incremented during the merge process
         workloads_to_process=()
         
@@ -203,16 +206,16 @@ jobs:
             
             current_version=$(cat "$version_file" | tr -d '\n\r' | tr -d ' ')
             
-            # Get version from the before commit (what was in prod-v1 before this merge)
+            # Get version from the before commit (what was in the target branch before this merge)
             before_version=""
             if [ -n "$before_commit" ] && git show "$before_commit":"$version_file" &>/dev/null; then
                 before_version=$(git show "$before_commit":"$version_file" | tr -d '\n\r' | tr -d ' ')
             else
                 if [ -z "$before_commit" ]; then
                     print_warning "No before commit available (force push or first push). Using base branch for comparison."
-                    # Try to get version from origin/prod-v1 as fallback
-                    if git show origin/prod-v1:"$version_file" &>/dev/null; then
-                        before_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
+                    # Try to get version from the target branch as fallback
+                    if git show "origin/$TARGET_BRANCH:$version_file" &>/dev/null; then
+                        before_version=$(git show "origin/$TARGET_BRANCH:$version_file" | tr -d '\n\r' | tr -d ' ')
                     else
                         before_version="0.0.0"
                     fi
@@ -224,7 +227,7 @@ jobs:
             
             print_info "Workload: $workload | Before: $before_version | Current: $current_version"
             
-            # Always process workloads with changes when merging to prod-v1
+            # Always process workloads with changes when merging to the target branch
             # The assumption is that versions are always incremented during merge
             workloads_to_process+=("$workload")
             if [ "$current_version" != "$before_version" ]; then
@@ -259,9 +262,9 @@ jobs:
             if [ -n "$before_commit" ] && git show "$before_commit":"$version_file" &>/dev/null; then
                 previous_version=$(git show "$before_commit":"$version_file" | tr -d '\n\r' | tr -d ' ')
             else
-                # Fallback to base branch or default
-                if git show origin/prod-v1:"$version_file" &>/dev/null; then
-                    previous_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
+                # Fallback to the target branch or default
+                if git show "origin/$TARGET_BRANCH:$version_file" &>/dev/null; then
+                    previous_version=$(git show "origin/$TARGET_BRANCH:$version_file" | tr -d '\n\r' | tr -d ' ')
                 else
                     previous_version="0.0.0"
                 fi
@@ -430,10 +433,10 @@ jobs:
             
             git commit -m "$commit_msg"
             
-            # Push directly to prod-v1 using bypass token
-            git push origin prod-v1
+            # Push directly to the target branch using bypass token
+            git push origin "$TARGET_BRANCH"
             
-            print_success "Committed and pushed changelog changes directly to prod-v1 (bypassing protection)"
+            print_success "Committed and pushed changelog changes directly to $TARGET_BRANCH (bypassing protection)"
         fi
         
         # Create summary for GitHub Actions
@@ -459,12 +462,12 @@ jobs:
         fi
         
         echo "**Summary:** Created ${#changelogs_created[@]} new changelogs, updated ${#changelogs_updated[@]} existing changelogs" >> $GITHUB_STEP_SUMMARY
-        echo "**Trigger:** Automatic on workload changes with version updates pushed to prod-v1" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger:** Automatic on workload changes with version updates pushed to $TARGET_BRANCH" >> $GITHUB_STEP_SUMMARY
         
         if [ $total_changes -gt 0 ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### ✅ Completed Actions:" >> $GITHUB_STEP_SUMMARY
-            echo "- Changelog changes committed and pushed directly to prod-v1" >> $GITHUB_STEP_SUMMARY
+            echo "- Changelog changes committed and pushed directly to $TARGET_BRANCH" >> $GITHUB_STEP_SUMMARY
             echo "- Branch protection rules bypassed using elevated token" >> $GITHUB_STEP_SUMMARY
             echo "- The auto-create-tags workflow will now run automatically" >> $GITHUB_STEP_SUMMARY
         fi

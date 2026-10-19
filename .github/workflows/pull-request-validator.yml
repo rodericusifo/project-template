@@ -13,6 +13,7 @@ on:
       - reopened
 
 env:
+  TARGET_BRANCH: ${{ github.base_ref }}
   LINTING_WORKFLOWS: >-
     [
       {
@@ -46,7 +47,7 @@ jobs:
 
     - name: Fetch base branch
       run: |
-        git fetch --no-tags --prune origin prod-v1:prod-v1 || true
+        git fetch --no-tags --prune origin "$TARGET_BRANCH:$TARGET_BRANCH" || true
 
     - name: Check workload changes
       id: check-changes
@@ -98,7 +99,7 @@ jobs:
         print_info "Checking for workload changes..."
 
         # Get commits in this PR
-        commits_in_pr=$(git rev-list prod-v1..HEAD)
+        commits_in_pr=$(git rev-list "$TARGET_BRANCH"..HEAD)
 
         if [ -z "$commits_in_pr" ]; then
             print_info "No new commits in PR."
@@ -358,7 +359,7 @@ jobs:
 
     - name: Fetch base branch
       run: |
-        git fetch origin prod-v1:prod-v1
+        git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH"
 
     - name: Run Version Validation
       run: |
@@ -481,10 +482,10 @@ jobs:
             return 0
         }
 
-        print_info "Running version validation for PR to prod-v1..."
+        print_info "Running version validation for PR to $TARGET_BRANCH..."
 
         # Get list of commits in this PR
-        commits_in_pr=$(git rev-list prod-v1..HEAD)
+        commits_in_pr=$(git rev-list "$TARGET_BRANCH"..HEAD)
 
         if [ -z "$commits_in_pr" ]; then
             print_info "No new commits in PR."
@@ -535,7 +536,7 @@ jobs:
         version_only_workloads=()
 
         # Get all VERSION files that were modified in this PR
-        modified_version_files=$(git diff --name-only prod-v1..HEAD | grep "^workload/.*/VERSION$" || true)
+        modified_version_files=$(git diff --name-only "$TARGET_BRANCH"..HEAD | grep "^workload/.*/VERSION$" || true)
 
         if [ -n "$modified_version_files" ]; then
             while IFS= read -r version_file; do
@@ -543,7 +544,7 @@ jobs:
                     workload_name=$(echo "$version_file" | cut -d'/' -f2)
 
                     # Check if only VERSION file was modified for this workload (no other significant workload files)
-                    workload_files_modified=$(git diff --name-only prod-v1..HEAD | grep "^workload/$workload_name/" | grep -v "^workload/$workload_name/VERSION$" | while IFS= read -r file; do
+                    workload_files_modified=$(git diff --name-only "$TARGET_BRANCH"..HEAD | grep "^workload/$workload_name/" | grep -v "^workload/$workload_name/VERSION$" | while IFS= read -r file; do
                         filename=$(basename "$file")
                         # Skip excluded files that don't count as significant changes
                         if [[ "$filename" != "CHANGELOG.md" ]] && \
@@ -616,11 +617,11 @@ jobs:
             current_version=$(cat "$version_file" | tr -d '\n\r' | tr -d ' ')
             base_version=""
 
-            # Get version from base branch (prod-v1)
-            if git show prod-v1:"$version_file" &>/dev/null; then
-                base_version=$(git show prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
+            # Get version from the base branch
+            if git show "$TARGET_BRANCH:$version_file" &>/dev/null; then
+                base_version=$(git show "$TARGET_BRANCH:$version_file" | tr -d '\n\r' | tr -d ' ')
             else
-                print_warning "VERSION file for $workload not found in base branch (prod-v1). Using 0.0.0 as base."
+                print_warning "VERSION file for $workload not found in base branch ($TARGET_BRANCH). Using 0.0.0 as base."
                 base_version="0.0.0"
             fi
 
