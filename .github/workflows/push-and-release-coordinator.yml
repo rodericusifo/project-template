@@ -16,6 +16,9 @@ permissions:
   packages: write
   actions: read
 
+env:
+  TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
+
 jobs:
   push-workflows:
     name: Push to ${{ matrix.registry }}
