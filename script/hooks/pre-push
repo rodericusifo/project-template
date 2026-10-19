@@ -5,6 +5,9 @@
 
 set -e
 
+# Configure the branch used as the base for version comparisons.
+base_branch="prod-v1"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -125,24 +128,20 @@ validate_version_increment() {
 remote="$1"
 url="$2"
 
+if ! git check-ref-format --branch "$base_branch" >/dev/null 2>&1; then
+    print_error "Invalid base branch configured in pre-push hook: '$base_branch'"
+    exit 1
+fi
+
 print_info "Running pre-push hook for version validation..."
 
 # Get list of commits being pushed
 # Compare against the target branch (where we're pushing to)
 # The remote and URL are passed as arguments to pre-push hook
-target_branch=""
-if [[ "$url" == *"origin"* ]] || [[ "$remote" == "origin" ]]; then
-    # All branches (prod-v1 itself and feature branches) are validated
-    # against prod-v1, the single base branch for this repo.
-    target_branch="origin/prod-v1"
-    # Refresh the local origin/prod-v1 ref so version comparisons below
-    # reflect the actual remote state, not a stale local cache.
-    print_info "Fetching latest prod-v1 from origin..."
-    git fetch origin prod-v1 --quiet 2>/dev/null || print_warning "Could not fetch origin/prod-v1; using local cache"
-else
-    # Fallback to upstream if available
-    target_branch="@{u}"
-fi
+target_branch="$remote/$base_branch"
+print_info "Fetching latest $base_branch from $remote..."
+git fetch "$remote" "$base_branch" --quiet 2>/dev/null || \
+    print_warning "Could not fetch $remote/$base_branch; using local cache"
 
 print_info "Comparing against target branch: $target_branch"
 
@@ -215,11 +214,11 @@ for workload in "${workload_units[@]}"; do
     current_version=$(git show "HEAD:$version_file" | tr -d '\n\r' | tr -d ' ')
     base_version=""
     
-    # Get version from base branch (prod-v1)
-    if git show origin/prod-v1:"$version_file" &>/dev/null; then
-        base_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
+    # Get version from the target branch
+    if git show "$target_branch:$version_file" &>/dev/null; then
+        base_version=$(git show "$target_branch:$version_file" | tr -d '\n\r' | tr -d ' ')
     else
-        print_warning "VERSION file for $workload not found in base branch (prod-v1). Using 0.0.0 as base."
+        print_warning "VERSION file for $workload not found in base branch ($target_branch). Using 0.0.0 as base."
         base_version="0.0.0"
     fi
     
@@ -249,8 +248,8 @@ if [ "$version_validation_failed" = true ]; then
         if git show "HEAD:$version_file" &>/dev/null; then
             current_version=$(git show "HEAD:$version_file" | tr -d '\n\r' | tr -d ' ')
             base_version=""
-            if git show origin/prod-v1:"$version_file" &>/dev/null; then
-                base_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
+            if git show "$target_branch:$version_file" &>/dev/null; then
+                base_version=$(git show "$target_branch:$version_file" | tr -d '\n\r' | tr -d ' ')
             else
                 base_version="0.0.0"
             fi
@@ -286,17 +285,17 @@ for workload in "${workload_units[@]}"; do
 
     current_version=$(git show "HEAD:$version_file" | tr -d '\n\r' | tr -d ' ')
 
-    # Get the previous version from base branch (prod-v1) for consistent comparison
+    # Get the previous version from the target branch for consistent comparison
     # This ensures all developers and CI systems use the same reference point
     # and provides a clear baseline of what's currently deployed vs. what's being released
     previous_version=""
     
     # Always use base branch as the source of truth for previous version
-    if git show origin/prod-v1:"$version_file" &>/dev/null; then
-        previous_version=$(git show origin/prod-v1:"$version_file" | tr -d '\n\r' | tr -d ' ')
-        print_info "Found previous version from base branch (prod-v1): $previous_version"
+    if git show "$target_branch:$version_file" &>/dev/null; then
+        previous_version=$(git show "$target_branch:$version_file" | tr -d '\n\r' | tr -d ' ')
+        print_info "Found previous version from base branch ($target_branch): $previous_version"
     else
-        print_warning "VERSION file for $workload not found in base branch (prod-v1). This might be a new workload."
+        print_warning "VERSION file for workload $workload not found in base branch ($target_branch). This might be a new workload."
     fi
 
     # If no previous version found, use a default

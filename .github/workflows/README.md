@@ -5,9 +5,15 @@ remote checks and delivery steps. They are configured for the included
 example, so review their paths, branch names, secrets, and build commands
 before reusing them in another project.
 
+The current trigger filters target `prod-v1`. Jobs do not duplicate that
+branch name: they resolve the active target branch from the GitHub Actions
+event context (`github.ref_name` for pushes, `github.base_ref` for pull
+requests, and `github.event.workflow_run.head_branch` for workflow runs).
+
 ## 📋 Responsibilities
 
-- `pull-request-validator.yml` checks pull requests targeting `prod-v1`,
+- `pull-request-validator.yml` checks pull requests targeting the configured
+  target branch,
   including workload structure, version changes, changelogs, change
   boundaries, Go linting, and Go unit tests.
 - `auto-lint.yml` is a reusable linting workflow with one job per configured
@@ -15,7 +21,7 @@ before reusing them in another project.
 - `auto-unit-tests.yml` is a reusable unit-testing workflow with one job per
   language. It is called by the pull-request validator.
 - `auto-create-or-update-changelogs.yml` maintains workload changelogs after
-  `VERSION` files change on `prod-v1`.
+  `VERSION` files change on the configured target branch.
 - `auto-create-tags.yml` runs after the changelog workflow succeeds and creates
   version tags for changed workloads.
 - `push-and-release-coordinator.yml` runs after tags are created. It calls
@@ -30,8 +36,9 @@ before reusing them in another project.
 
 ## 🧪 Pull Request Validation
 
-`pull-request-validator.yml` is configured for pull requests targeting
-`prod-v1`. It checks the example's workload conventions, including:
+`pull-request-validator.yml` is configured for pull requests targeting the
+configured target branch. It checks the example's workload conventions,
+including:
 
 - changed workloads are represented in `WORKLOAD` in `stack.mk`;
 - workload changes are accompanied by the expected `VERSION` updates;
@@ -64,7 +71,7 @@ For the included example, the delivery chain is:
 ```text
 pull request
   -> validation
-merge to prod-v1
+merge to the target branch
   -> changelog update
   -> version tag
   -> image publishing

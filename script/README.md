@@ -47,6 +47,12 @@ The installed hooks currently provide:
 - `pre-push`: validates workload version changes and changelog expectations
   before pushing.
 
+The pre-push hook compares changes with the `base_branch` value configured near
+the top of `script/hooks/pre-push`. Set it to `prod-v1`, `prod-v2`, or another
+target branch to select the base branch for new feature branches. The hook
+fetches that branch from the remote being pushed to before validating version
+changes.
+
 The hooks are local copies. Re-run `make setup-hooks` after changing the
 source files or after cloning the repository on another machine.
 
